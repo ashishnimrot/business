@@ -47,6 +47,10 @@ This project aims to build a comprehensive billing, accounting, and GST manageme
 - [API Specifications](./docs/API_SPECIFICATIONS.md) - RESTful API documentation
 - [NFR Requirements](./docs/NFR_REQUIREMENTS.md) - Performance, security, scalability requirements
 
+### Pre-MVP Readiness
+- **[Pre-MVP Checklist](./docs/PRE_MVP_CHECKLIST.md)** - Comprehensive checklist of all items needed before starting MVP development
+- **[Critical Gaps Before MVP](./docs/CRITICAL_GAPS_BEFORE_MVP.md)** - Critical blockers and action items that must be completed before Sprint 1
+
 ### Original Reference
 - [DPR Report](./Vyapar_App_Full_DPR_Report.pdf) - Original project report (Note: File name unchanged)
 
