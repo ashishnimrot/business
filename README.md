@@ -21,6 +21,7 @@ This project aims to build a comprehensive billing, accounting, and GST manageme
 ## Project Documentation
 
 ### Planning & Architecture
+- **[Architecture Diagrams](./docs/ARCHITECTURE_DIAGRAMS.md)** - Comprehensive architecture diagrams with system flows, microservices, data flow, and application flows (Mermaid diagrams)
 - [Project Architecture](./docs/PROJECT_ARCHITECTURE.md) - Technical architecture, monorepo structure, microservices design
 - [Implementation Plan](./docs/IMPLEMENTATION_PLAN.md) - Gap analysis and implementation roadmap
 - **[PRD - Detailed Requirements](./docs/PRD_DETAILED.md)** - Comprehensive PRD with problem statements, user stories, tasks, subtasks, and acceptance criteria (35 modules - 100% India-compliant + strategic features + AI capabilities)
@@ -34,6 +35,7 @@ This project aims to build a comprehensive billing, accounting, and GST manageme
 - **[Comprehensive Review](./docs/COMPREHENSIVE_REVIEW.md)** - Complete quality assurance review, issues fixed, and readiness assessment
 
 ### Development Planning
+- **[MVP & Beta Release Plan](./docs/MVP.md)** - MVP scope definition, beta release strategy, customer testing plan, and success criteria
 - **[Development Plan](./docs/DEVELOPMENT_PLAN.md)** - Comprehensive 48-sprint development plan with all 35 modules broken down by phase
 - **[Detailed Sprint Breakdown](./docs/DETAILED_SPRINT_BREAKDOWN.md)** - Detailed user stories and tasks for each sprint with effort estimation
 - **[Effort Estimation](./docs/EFFORT_ESTIMATION.md)** - Complete effort estimation, resource planning, and cost analysis
