@@ -1,0 +1,297 @@
+/**
+ * Print Stylesheet
+ * Professional print-optimized styles for all pages
+ */
+
+@media print {
+  /* Hide UI elements */
+  header,
+  nav,
+  footer,
+  .no-print,
+  button:not(.print-button),
+  .sidebar,
+  .bottom-nav,
+  [role="dialog"],
+  [role="alertdialog"],
+  .toast,
+  .dropdown-menu,
+  .command-menu {
+    display: none !important;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
+
+  /* Body styles */
+  body {
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #000;
+    background: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Headings */
+  h1 {
+    font-size: 24pt;
+    font-weight: bold;
+    margin-top: 0;
+    margin-bottom: 12pt;
+    page-break-after: avoid;
+    color: #000;
+  }
+
+  h2 {
+    font-size: 18pt;
+    font-weight: bold;
+    margin-top: 16pt;
+    margin-bottom: 8pt;
+    page-break-after: avoid;
+    color: #000;
+  }
+
+  h3 {
+    font-size: 14pt;
+    font-weight: bold;
+    margin-top: 12pt;
+    margin-bottom: 6pt;
+    page-break-after: avoid;
+    color: #000;
+  }
+
+  /* Paragraphs */
+  p {
+    margin: 6pt 0;
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Links */
+  a {
+    color: #000;
+    text-decoration: underline;
+  }
+
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12pt 0;
+    page-break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  th,
+  td {
+    border: 1px solid #000;
+    padding: 8pt;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background-color: #f0f0f0 !important;
+    font-weight: bold;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color: #000;
+  }
+
+  /* Lists */
+  ul,
+  ol {
+    margin: 8pt 0;
+    padding-left: 24pt;
+  }
+
+  li {
+    margin: 4pt 0;
+    page-break-inside: avoid;
+  }
+
+  /* Images */
+  img {
+    max-width: 100%;
+    height: auto;
+    page-break-inside: avoid;
+  }
+
+  /* Page breaks */
+  .page-break {
+    page-break-before: always;
+  }
+
+  .no-break {
+    page-break-inside: avoid;
+  }
+
+  .break-after {
+    page-break-after: always;
+  }
+
+  /* Cards and containers */
+  .card,
+  [class*="card"] {
+    border: 1px solid #ddd;
+    padding: 12pt;
+    margin: 12pt 0;
+    page-break-inside: avoid;
+    background: #fff !important;
+  }
+
+  /* Invoice specific styles */
+  .invoice-header {
+    margin-bottom: 20pt;
+    page-break-after: avoid;
+  }
+
+  .invoice-items {
+    margin: 16pt 0;
+  }
+
+  .invoice-totals {
+    margin-top: 16pt;
+    page-break-inside: avoid;
+    border-top: 2px solid #000;
+    padding-top: 8pt;
+  }
+
+  .invoice-footer {
+    margin-top: 24pt;
+    page-break-inside: avoid;
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Badges and status indicators */
+  .badge,
+  [class*="badge"] {
+    border: 1px solid #000;
+    padding: 2pt 6pt;
+    font-size: 10pt;
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Buttons - show as text */
+  button.print-button {
+    display: inline-block;
+    border: none;
+    background: none;
+    padding: 0;
+    font-weight: normal;
+  }
+
+  /* Hide interactive elements */
+  input,
+  textarea,
+  select {
+    border: 1px solid #000;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Spacing */
+  .mb-4,
+  .mb-6,
+  .mb-8 {
+    margin-bottom: 12pt !important;
+  }
+
+  .mt-4,
+  .mt-6,
+  .mt-8 {
+    margin-top: 12pt !important;
+  }
+
+  /* Colors - ensure black text */
+  * {
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  /* Exceptions for important elements */
+  .print-color {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Footer */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 9pt;
+    color: #666;
+    border-top: 1px solid #ddd;
+    padding: 8pt;
+  }
+
+  /* Header */
+  .print-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10pt;
+    color: #000;
+    border-bottom: 1px solid #ddd;
+    padding: 8pt;
+  }
+
+  /* Avoid breaking these elements */
+  .no-break-inside {
+    page-break-inside: avoid;
+  }
+
+  /* Force page break */
+  .force-page-break {
+    page-break-before: always;
+  }
+}
+
+/* Screen-only styles */
+@media screen {
+  .print-only {
+    display: none;
+  }
+}
+
+/* Print-only styles */
+@media print {
+  .screen-only {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+}
+

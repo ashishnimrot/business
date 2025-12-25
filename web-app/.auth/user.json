@@ -1,0 +1,26 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "user_id",
+          "value": "9a649f37-dd1a-4bcb-ad8a-f7989abb3d4d"
+        },
+        {
+          "name": "access_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YTY0OWYzNy1kZDFhLTRiY2ItYWQ4YS1mNzk4OWFiYjNkNGQiLCJwaG9uZSI6Ijk4NzY1NDMyMTAiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzY2NTkzMDkwLCJleHAiOjE3NjY1OTM5OTB9.6O0o4njJOdzb2nbfZCEBzHSfJEhuN7o_w-g2aXU6ZcU"
+        },
+        {
+          "name": "refresh_token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YTY0OWYzNy1kZDFhLTRiY2ItYWQ4YS1mNzk4OWFiYjNkNGQiLCJwaG9uZSI6Ijk4NzY1NDMyMTAiLCJ0eXBlIjoicmVmcmVzaCIsImlhdCI6MTc2NjU5MzA5MCwiZXhwIjoxNzY5MTg1MDkwfQ.vGKwOuF79Q1lnSmQYJ0OmDToVxBFEHKxqdeTU_G-nMU"
+        },
+        {
+          "name": "business_id",
+          "value": "cbda1970-e76e-4815-b060-e0e4b8914bcc"
+        }
+      ]
+    }
+  ]
+}

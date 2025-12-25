@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,8 +13,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Search, Users } from 'lucide-react';
+import { AppLayout, BottomNav } from '@/components/layout';
+import { PageHeader } from '@/components/ui/page-header';
+import { FEATURE_IDS } from '@/lib/services/documentation.service';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { NoPartiesEmpty, NoSearchResultsEmpty } from '@/components/ui/empty-state';
+import { Plus, Search, Users, Phone, Mail, MapPin, MoreVertical, Eye, Edit, Trash2, FileSpreadsheet } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import { exportPartiesToExcel } from '@/lib/export-utils';
 
 // Party form validation schema - aligned with backend CreatePartyDto
 // REQUIRED: name, type only
@@ -58,7 +73,7 @@ const partySchema = z.object({
   ),
   // Financial fields - optional
   credit_limit: z.string().optional(),
-  credit_days: z.string().optional(),
+  credit_period_days: z.string().optional(),
 });
 
 // Helper to clean payload - removes empty strings and undefined values
@@ -96,6 +111,12 @@ export default function PartiesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; party: Party | null; isDeleting: boolean }>({
+    open: false,
+    party: null,
+    isDeleting: false,
+  });
+  const hasFetched = useRef(false);
 
   const form = useForm<PartyFormValues>({
     resolver: zodResolver(partySchema),
@@ -112,19 +133,11 @@ export default function PartiesPage() {
       billing_state: '',
       billing_pincode: '',
       credit_limit: '',
-      credit_days: '',
+      credit_period_days: '',
     },
   });
 
-  useEffect(() => {
-    if (!isAuthenticated || !businessId) {
-      router.push('/');
-    } else {
-      fetchParties();
-    }
-  }, [isAuthenticated, businessId, router]);
-
-  const fetchParties = async () => {
+  const fetchParties = useCallback(async () => {
     try {
       const response = await partyApi.get('/parties');
       const data = Array.isArray(response.data) ? response.data : (response.data?.data || []);
@@ -136,7 +149,20 @@ export default function PartiesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !businessId) {
+      router.push('/');
+      return;
+    }
+    
+    // Prevent duplicate fetches
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchParties();
+    }
+  }, [isAuthenticated, businessId, router, fetchParties]);
 
   const onSubmit = async (data: PartyFormValues) => {
     setIsSubmitting(true);
@@ -160,7 +186,7 @@ export default function PartiesPage() {
         shipping_state: data.shipping_state,
         shipping_pincode: data.shipping_pincode,
         credit_limit: data.credit_limit ? parseFloat(data.credit_limit) : undefined,
-        credit_days: data.credit_days ? parseInt(data.credit_days) : undefined,
+        credit_period_days: data.credit_period_days ? parseInt(data.credit_period_days) : undefined,
       };
       
       // Remove empty strings and undefined values
@@ -192,112 +218,113 @@ export default function PartiesPage() {
     return matchesSearch && matchesType;
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading parties...</p>
-        </div>
-      </div>
-    );
-  }
+  // Stats
+  const totalCustomers = partiesList.filter(p => p.type === 'customer').length;
+  const totalSuppliers = partiesList.filter(p => p.type === 'supplier').length;
+  const totalReceivable = partiesList
+    .filter(p => (p.balance || 0) > 0)
+    .reduce((sum, p) => sum + Number(p.balance || 0), 0);
+  const totalPayable = partiesList
+    .filter(p => (p.balance || 0) < 0)
+    .reduce((sum, p) => sum + Math.abs(Number(p.balance || 0)), 0);
+
+  const getTypeVariant = (type: string): "default" | "secondary" | "outline" => {
+    switch (type) {
+      case 'customer': return 'default';
+      case 'supplier': return 'secondary';
+      default: return 'outline';
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/dashboard')}
-                className="mr-4"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Parties</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage customers and suppliers</p>
-              </div>
-            </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Party
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Add New Party</DialogTitle>
-                  <DialogDescription>
-                    Enter party details. Customer or Supplier information.
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Name *</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Party Name" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+    <AppLayout>
+      <PageHeader
+        title="Parties"
+        description="Manage customers and suppliers"
+        helpFeatureId={FEATURE_IDS.PARTIES_OVERVIEW}
+      >
+        <Button 
+          variant="outline" 
+          onClick={() => exportPartiesToExcel(partiesList as any)}
+          disabled={partiesList.length === 0}
+        >
+          <FileSpreadsheet className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Party
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Party</DialogTitle>
+              <DialogDescription>
+                Enter party details. Customer or Supplier information.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Party Name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                      <FormField
-                        control={form.control}
-                        name="type"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Type *</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select type" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="customer">Customer</SelectItem>
-                                <SelectItem value="supplier">Supplier</SelectItem>
-                                <SelectItem value="both">Both</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                  <FormField
+                    control={form.control}
+                    name="type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Type *</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="customer">Customer</SelectItem>
+                            <SelectItem value="supplier">Supplier</SelectItem>
+                            <SelectItem value="both">Both</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="phone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Phone</FormLabel>
-                            <FormControl>
-                              <Input placeholder="9876543210" {...field} maxLength={10} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="9876543210" {...field} maxLength={10} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                      <FormField
-                        control={form.control}
-                        name="email"
-                        render={({ field }) => (
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
                           <FormItem>
                             <FormLabel>Email</FormLabel>
                             <FormControl>
@@ -315,7 +342,13 @@ export default function PartiesPage() {
                         name="gstin"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>GSTIN</FormLabel>
+                            <div className="flex items-center gap-2">
+                              <FormLabel>GSTIN</FormLabel>
+                              <HelpTooltip
+                                content="15-character GST Identification Number. Required for GST-compliant invoicing. Format: 22AAAAA0000A1Z5"
+                                title="GSTIN"
+                              />
+                            </div>
                             <FormControl>
                               <Input placeholder="29ABCDE1234F1Z5" {...field} maxLength={15} />
                             </FormControl>
@@ -424,7 +457,13 @@ export default function PartiesPage() {
                           name="credit_limit"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Credit Limit (₹)</FormLabel>
+                              <div className="flex items-center gap-2">
+                                <FormLabel>Credit Limit (₹)</FormLabel>
+                                <HelpTooltip
+                                  content="Maximum amount you'll allow this party to owe you on credit. The app will warn you if this limit is exceeded."
+                                  title="Credit Limit"
+                                />
+                              </div>
                               <FormControl>
                                 <Input type="number" placeholder="50000" {...field} />
                               </FormControl>
@@ -435,10 +474,16 @@ export default function PartiesPage() {
 
                         <FormField
                           control={form.control}
-                          name="credit_days"
+                          name="credit_period_days"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Credit Days</FormLabel>
+                              <div className="flex items-center gap-2">
+                                <FormLabel>Credit Days</FormLabel>
+                                <HelpTooltip
+                                  content="Number of days the party has to make payment. Used to calculate invoice due dates and track overdue payments."
+                                  title="Credit Period"
+                                />
+                              </div>
                               <FormControl>
                                 <Input type="number" placeholder="30" {...field} />
                               </FormControl>
@@ -466,93 +511,200 @@ export default function PartiesPage() {
                 </Form>
               </DialogContent>
             </Dialog>
-          </div>
-        </div>
-      </header>
+          </PageHeader>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search and Filter */}
-        <div className="mb-6 flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search parties by name, phone, or email..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Total Parties</div>
+                <div className="text-2xl font-bold">{partiesList.length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Customers</div>
+                <div className="text-2xl font-bold text-blue-600">{totalCustomers}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">To Receive</div>
+                <div className="text-2xl font-bold text-green-600">
+                  ₹{totalReceivable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">To Pay</div>
+                <div className="text-2xl font-bold text-red-600">
+                  ₹{totalPayable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Filter by type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="customer">Customers</SelectItem>
-              <SelectItem value="supplier">Suppliers</SelectItem>
-              <SelectItem value="both">Both</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
-        {/* Parties List */}
-        {filteredParties.length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">
-                {partiesList.length === 0 ? 'No parties yet' : 'No matching parties'}
-              </h2>
-              <p className="text-gray-600 mb-6">
-                {partiesList.length === 0
-                  ? 'Create your first party to get started'
-                  : 'Try adjusting your search or filter'}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredParties.map((party) => (
-              <Card key={party.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex justify-between items-start">
-                    <span>{party.name}</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      party.type === 'customer' ? 'bg-blue-100 text-blue-800' :
-                      party.type === 'supplier' ? 'bg-green-100 text-green-800' :
-                      'bg-purple-100 text-purple-800'
-                    }`}>
-                      {(party.type || 'unknown').toUpperCase()}
-                    </span>
-                  </CardTitle>
-                  <CardDescription>
-                    {party.billing_city || ''}{party.billing_city && party.billing_state ? ', ' : ''}{party.billing_state || ''}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {party.phone && (
-                    <p className="text-sm text-gray-600 mb-1">📞 {party.phone}</p>
-                  )}
-                  {party.email && (
-                    <p className="text-sm text-gray-600 mb-1">✉️ {party.email}</p>
-                  )}
-                  {party.gstin && (
-                    <p className="text-sm text-gray-600 mb-2">GSTIN: {party.gstin}</p>
-                  )}
-                  <div className="mt-4 pt-4 border-t">
-                    <p className="text-sm font-medium">
-                      Balance: <span className={(party.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        ₹ {Number(party.balance || 0).toFixed(2)}
+          {/* Search and Filter */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search parties by name, phone, or email..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="customer">Customers</SelectItem>
+                <SelectItem value="supplier">Suppliers</SelectItem>
+                <SelectItem value="both">Both</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Loading State */}
+          {isLoading ? (
+            <TableSkeleton rows={5} columns={4} />
+          ) : partiesList.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <NoPartiesEmpty onCreateClick={() => setIsDialogOpen(true)} />
+              </CardContent>
+            </Card>
+          ) : filteredParties.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <NoSearchResultsEmpty query={searchQuery} onClearClick={() => setSearchQuery('')} />
+              </CardContent>
+            </Card>
+          ) : (
+            /* Parties List */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredParties.map((party) => (
+                <Card key={party.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/parties/${party.id}`)}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${
+                          party.type === 'customer' ? 'bg-blue-100' :
+                          party.type === 'supplier' ? 'bg-green-100' :
+                          'bg-purple-100'
+                        }`}>
+                          <Users className={`h-5 w-5 ${
+                            party.type === 'customer' ? 'text-blue-600' :
+                            party.type === 'supplier' ? 'text-green-600' :
+                            'text-purple-600'
+                          }`} />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">{party.name}</CardTitle>
+                          <Badge variant={getTypeVariant(party.type)} className="text-xs mt-1">
+                            {(party.type || 'unknown').toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/parties/${party.id}`); }}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/parties/${party.id}/edit`); }}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          {party.phone && (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.location.href = `tel:${party.phone}`; }}>
+                              <Phone className="h-4 w-4 mr-2" />
+                              Call
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setDeleteDialog({ open: true, party, isDeleting: false });
+                            }}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      {party.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-3 w-3" />
+                          {party.phone}
+                        </div>
+                      )}
+                      {party.email && (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-3 w-3" />
+                          {party.email}
+                        </div>
+                      )}
+                      {(party.billing_city || party.billing_state) && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3 w-3" />
+                          {party.billing_city || ''}{party.billing_city && party.billing_state ? ', ' : ''}{party.billing_state || ''}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 pt-3 border-t flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Balance</span>
+                      <span className={`font-semibold ${(party.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ₹{Math.abs(Number(party.balance || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        <span className="text-xs ml-1">{(party.balance || 0) >= 0 ? 'Dr' : 'Cr'}</span>
                       </span>
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Delete Confirmation Dialog */}
+          <DeleteConfirmDialog
+            open={deleteDialog.open}
+            onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
+            onConfirm={async () => {
+              if (!deleteDialog.party) return;
+              setDeleteDialog({ ...deleteDialog, isDeleting: true });
+              try {
+                await partyApi.delete(`/parties/${deleteDialog.party.id}`);
+                toast.success('Party deleted successfully');
+                setDeleteDialog({ open: false, party: null, isDeleting: false });
+                fetchParties();
+              } catch (err: any) {
+                toast.error('Failed to delete party', { 
+                  description: err.response?.data?.message || 'Please try again' 
+                });
+                setDeleteDialog({ ...deleteDialog, isDeleting: false });
+              }
+            }}
+            title="Delete Party"
+            itemName={deleteDialog.party?.name}
+            isDeleting={deleteDialog.isDeleting}
+          />
+
+          {/* Mobile Bottom Nav */}
+          <BottomNav />
+        </AppLayout>
+      );
+    }

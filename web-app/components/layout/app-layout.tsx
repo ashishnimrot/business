@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { Breadcrumbs } from "./breadcrumbs";
+import { PageTransition } from "@/components/ui/page-transition";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -25,9 +26,11 @@ export function AppLayout({ children, className }: AppLayoutProps) {
         <Header />
 
         {/* Page Content */}
-        <main className={cn("p-4 md:p-6", className)}>
+        <main id="main-content" className={cn("p-4 md:p-6", className)}>
           <Breadcrumbs />
-          {children}
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
       </div>
     </div>

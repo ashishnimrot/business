@@ -29,6 +29,7 @@ import {
   PartyLedgerResponseDto,
 } from '@business-app/shared/dto';
 import { Party } from '../entities/party.entity';
+import { validateOptionalUUID } from '@business-app/shared/utils';
 
 @ApiTags('Party')
 @Controller('api/v1/parties')
@@ -93,11 +94,15 @@ export class PartyController {
     description: 'Party details',
     type: PartyResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid UUID format' })
   @ApiResponse({ status: 404, description: 'Party not found' })
   async findOne(
     @Request() req: any,
     @Param('id') id: string
   ): Promise<PartyResponseDto> {
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
     const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
     const party = await this.partyService.findById(businessId, id);
     return this.toResponseDto(party);

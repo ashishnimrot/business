@@ -13,8 +13,8 @@ export class OtpService {
   private readonly OTP_LENGTH = 6;
   private readonly OTP_EXPIRY_MINUTES = 5;
   private readonly MAX_ATTEMPTS = 5;
-  // In development/test mode, allow more requests for testing
-  private readonly RATE_LIMIT_REQUESTS = process.env.NODE_ENV === 'production' ? 3 : 100;
+  // In development/test mode, allow 10000 requests for comprehensive E2E testing
+  private readonly RATE_LIMIT_REQUESTS = process.env.NODE_ENV === 'production' ? 3 : 10000;
   private readonly RATE_LIMIT_WINDOW_HOURS = 1;
 
   constructor(private readonly otpRequestRepository: OtpRequestRepository) {}

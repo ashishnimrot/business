@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -77,6 +77,7 @@ export default function BusinessSelectPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const hasFetched = useRef(false);
 
   const form = useForm<BusinessFormValues>({
     resolver: zodResolver(businessSchema),
@@ -95,21 +96,7 @@ export default function BusinessSelectPage() {
     },
   });
 
-  // Check authentication
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-
-  // Fetch businesses
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchBusinesses();
-    }
-  }, [isAuthenticated]);
-
-  const fetchBusinesses = async () => {
+  const fetchBusinesses = useCallback(async () => {
     try {
       const response = await businessApi.get('/businesses');
       const data = Array.isArray(response.data) ? response.data : (response.data?.data || []);
@@ -121,7 +108,21 @@ export default function BusinessSelectPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Check authentication and fetch businesses in single effect
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    
+    // Prevent duplicate fetches
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchBusinesses();
+    }
+  }, [isAuthenticated, router, fetchBusinesses]);
 
   const handleSelectBusiness = (businessId: string) => {
     setBusinessId(businessId);

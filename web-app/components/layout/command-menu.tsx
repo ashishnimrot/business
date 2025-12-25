@@ -133,7 +133,7 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
             <CommandShortcut>⌘,</CommandShortcut>
           </CommandItem>
           <CommandItem
-            onSelect={() => runCommand(() => router.push("/settings/business"))}
+            onSelect={() => runCommand(() => router.push("/settings"))}
           >
             <Calculator className="mr-2 h-4 w-4" />
             <span>Business Settings</span>

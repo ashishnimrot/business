@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -88,7 +89,14 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuthStore();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -161,6 +169,7 @@ export function Sidebar({ className }: SidebarProps) {
                       "w-full justify-start text-muted-foreground hover:text-destructive",
                       isCollapsed && "justify-center px-2"
                     )}
+                    onClick={handleLogout}
                   >
                     <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-3")} />
                     {!isCollapsed && "Logout"}
@@ -194,10 +203,10 @@ function NavLink({ item, isActive, isCollapsed }: NavLinkProps) {
           <Link
             href={item.href}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-md mx-auto",
+              "flex h-10 w-10 items-center justify-center rounded-md mx-auto transition-all duration-200",
               isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-sm scale-110"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-105"
             )}
           >
             <Icon className="h-4 w-4" />
@@ -219,10 +228,10 @@ function NavLink({ item, isActive, isCollapsed }: NavLinkProps) {
     <Link
       href={item.href}
       className={cn(
-        "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors",
+        "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-all duration-200",
         isActive
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-1"
       )}
     >
       <Icon className="h-4 w-4" />

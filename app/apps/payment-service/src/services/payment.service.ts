@@ -32,7 +32,7 @@ export class PaymentService {
     }
 
     // Create transaction
-    const transaction = await this.transactionRepository.create({
+    const transactionData = {
       business_id: businessId,
       party_id: createDto.party_id,
       invoice_id: createDto.invoice_id,
@@ -49,7 +49,9 @@ export class PaymentService {
       notes: createDto.notes,
       status: 'active',
       created_by: userId,
-    });
+    };
+
+    const transaction = await this.transactionRepository.create(transactionData);
 
     // TODO: Update invoice payment_status if invoice_id is provided
     // This will require integration with Invoice Service
@@ -97,15 +99,20 @@ export class PaymentService {
     const page = filters?.page || 1;
     const limit = filters?.limit || 20;
 
+    // Handle "new" as invoiceId (frontend sends this when creating new invoice)
+    // Filter it out so we don't try to query with invalid UUID
+    const processedFilters = {
+      ...filters,
+      invoiceId: filters?.invoiceId === 'new' ? undefined : filters?.invoiceId,
+      startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
+      endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
+      page,
+      limit,
+    };
+
     const result = await this.transactionRepository.findByBusinessId(
       businessId,
-      {
-        ...filters,
-        startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
-        endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
-        page,
-        limit,
-      }
+      processedFilters
     );
 
     return {

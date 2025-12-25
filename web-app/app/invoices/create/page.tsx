@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { ArrowLeft, Plus, Trash2, Calculator } from 'lucide-react';
 
 // Invoice form validation schema - aligned with backend CreateInvoiceDto
@@ -275,7 +276,13 @@ export default function CreateInvoicePage() {
                     name="invoice_type"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Invoice Type *</FormLabel>
+                        <div className="flex items-center gap-2">
+                          <FormLabel>Invoice Type *</FormLabel>
+                          <HelpTooltip
+                            content="Sale: Invoice for goods/services you sell. Purchase: Invoice for goods/services you buy. GST calculations depend on this selection."
+                            title="Invoice Type"
+                          />
+                        </div>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
@@ -297,9 +304,15 @@ export default function CreateInvoicePage() {
                     name="party_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>
-                          {invoiceType === 'sale' ? 'Customer' : 'Supplier'} *
-                        </FormLabel>
+                        <div className="flex items-center gap-2">
+                          <FormLabel>
+                            {invoiceType === 'sale' ? 'Customer' : 'Supplier'} *
+                          </FormLabel>
+                          <HelpTooltip
+                            content="Select the customer (for sale) or supplier (for purchase). Only parties matching the invoice type are shown. GST calculations depend on party location."
+                            title="Select Party"
+                          />
+                        </div>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>

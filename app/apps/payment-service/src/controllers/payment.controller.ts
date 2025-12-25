@@ -9,6 +9,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +23,7 @@ import {
   PaymentResponseDto,
 } from '@business-app/shared/dto';
 import { Transaction } from '../entities/transaction.entity';
+import { validateOptionalUUID } from '@business-app/shared/utils';
 
 @ApiTags('Payments')
 @Controller('api/v1/payments')
@@ -43,8 +45,9 @@ export class PaymentController {
     @Request() req: any,
     @Body() createDto: CreatePaymentDto
   ): Promise<PaymentResponseDto> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
-    const userId = req.user?.id || 'user-1'; // Mock for now
+    // Extract business_id from header (x-business-id) or fallback to mock
+    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
+    const userId = req.headers['x-user-id'] || req.user?.id || '00000000-0000-0000-0000-000000000001';
     const transaction = await this.paymentService.recordPayment(
       businessId,
       userId,
@@ -74,7 +77,14 @@ export class PaymentController {
     page: number;
     limit: number;
   }> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
+    // Validate UUID query parameters (skip "new" for invoiceId as it's handled in service)
+    if (partyId && partyId !== 'new') {
+      validateOptionalUUID(partyId, 'partyId');
+    }
+    // invoiceId="new" is handled in service, so we don't validate it here
+
+    // Extract business_id from header (x-business-id) or fallback to mock
+    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
     const result = await this.paymentService.findByBusinessId(businessId, {
       partyId,
       invoiceId,
@@ -100,12 +110,17 @@ export class PaymentController {
     description: 'Payment details',
     type: PaymentResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid UUID format' })
   @ApiResponse({ status: 404, description: 'Payment not found' })
   async findOne(
     @Request() req: any,
     @Param('id') id: string
   ): Promise<PaymentResponseDto> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
+    // Extract business_id from header (x-business-id) or fallback to mock
+    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
     const transaction = await this.paymentService.findById(businessId, id);
     return this.toResponseDto(transaction);
   }
@@ -117,9 +132,12 @@ export class PaymentController {
     description: 'List of payments for invoice',
     type: [PaymentResponseDto],
   })
+  @ApiResponse({ status: 400, description: 'Invalid UUID format' })
   async findByInvoice(
     @Param('invoiceId') invoiceId: string
   ): Promise<PaymentResponseDto[]> {
+    // Validate UUID format
+    validateOptionalUUID(invoiceId, 'invoiceId');
     const transactions = await this.paymentService.findByInvoiceId(invoiceId);
     return transactions.map((t) => this.toResponseDto(t));
   }

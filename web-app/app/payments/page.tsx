@@ -13,9 +13,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Search, CreditCard } from 'lucide-react';
+import { AppLayout, BottomNav } from '@/components/layout';
+import { PageHeader } from '@/components/ui/page-header';
+import { FEATURE_IDS } from '@/lib/services/documentation.service';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { NoPaymentsEmpty, NoSearchResultsEmpty } from '@/components/ui/empty-state';
+import { Plus, Search, CreditCard, ArrowDownLeft, ArrowUpRight, MoreVertical, Eye, Trash2, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import { exportPaymentsToExcel } from '@/lib/export-utils';
 
 // Payment form validation schema - aligned with backend CreatePaymentDto
 // REQUIRED: party_id, transaction_type, transaction_date, amount, payment_mode
@@ -97,6 +112,11 @@ export default function PaymentsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; payment: Payment | null; isDeleting: boolean }>({
+    open: false,
+    payment: null,
+    isDeleting: false,
+  });
 
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentSchema),
@@ -134,9 +154,9 @@ export default function PaymentsPage() {
         partyApi.get('/parties'),
       ]);
       
-      const paymentsData = Array.isArray(paymentsRes.data) ? paymentsRes.data : (paymentsRes.data?.data || []);
-      const invoicesData = Array.isArray(invoicesRes.data) ? invoicesRes.data : (invoicesRes.data?.data || []);
-      const partiesData = Array.isArray(partiesRes.data) ? partiesRes.data : (partiesRes.data?.data || []);
+      const paymentsData = Array.isArray(paymentsRes.data) ? paymentsRes.data : (paymentsRes.data?.payments || paymentsRes.data?.data || []);
+      const invoicesData = Array.isArray(invoicesRes.data) ? invoicesRes.data : (invoicesRes.data?.invoices || invoicesRes.data?.data || []);
+      const partiesData = Array.isArray(partiesRes.data) ? partiesRes.data : (partiesRes.data?.parties || partiesRes.data?.data || []);
       
       setPayments(paymentsData);
       setInvoices(invoicesData);
@@ -203,45 +223,49 @@ export default function PaymentsPage() {
       payment.reference_number?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  // Stats
+  const totalReceived = paymentsList
+    .filter(p => p.transaction_type === 'payment_in')
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const totalPaid = paymentsList
+    .filter(p => p.transaction_type === 'payment_out')
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading payments...</p>
-        </div>
-      </div>
+      <AppLayout>
+        <PageHeader 
+          title="Payments" 
+          description="Record and track payments"
+          helpFeatureId={FEATURE_IDS.PAYMENTS_OVERVIEW}
+        />
+        <TableSkeleton rows={5} columns={4} />
+      </AppLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/dashboard')}
-                className="mr-4"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-                <p className="text-sm text-gray-600 mt-1">Record and track payments</p>
-              </div>
-            </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Record Payment
-                </Button>
-              </DialogTrigger>
+    <AppLayout>
+      <PageHeader
+        title="Payments"
+        description="Record and track payments"
+        helpFeatureId={FEATURE_IDS.PAYMENTS_OVERVIEW}
+      >
+        <Button 
+          variant="outline" 
+          onClick={() => exportPaymentsToExcel(paymentsList)}
+          disabled={paymentsList.length === 0}
+        >
+          <FileSpreadsheet className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Record Payment
+            </Button>
+          </DialogTrigger>
               <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Record Payment</DialogTitle>
@@ -303,7 +327,13 @@ export default function PaymentsPage() {
                       name="invoice_id"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Invoice (Optional)</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <FormLabel>Invoice (Optional)</FormLabel>
+                            <HelpTooltip
+                              content="Optionally link this payment to a specific invoice. This helps track which invoices have been paid and shows remaining balances."
+                              title="Link to Invoice"
+                            />
+                          </div>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
@@ -345,7 +375,13 @@ export default function PaymentsPage() {
                       name="payment_mode"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Payment Mode *</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <FormLabel>Payment Mode *</FormLabel>
+                            <HelpTooltip
+                              content="Select how the payment was made. This helps with reconciliation and tracking different payment methods."
+                              title="Payment Mode"
+                            />
+                          </div>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger>
@@ -473,87 +509,173 @@ export default function PaymentsPage() {
                 </Form>
               </DialogContent>
             </Dialog>
-          </div>
-        </div>
-      </header>
+          </PageHeader>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search by invoice number, party name, or reference..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Total Payments</div>
+                <div className="text-2xl font-bold">{paymentsList.length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Received</div>
+                <div className="text-2xl font-bold text-green-600">
+                  ₹{totalReceived.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Paid</div>
+                <div className="text-2xl font-bold text-red-600">
+                  ₹{totalPaid.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Net Flow</div>
+                <div className={`text-2xl font-bold ${totalReceived - totalPaid >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  ₹{Math.abs(totalReceived - totalPaid).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
 
-        {/* Payments List */}
-        {filteredPayments.length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">
-                {paymentsList.length === 0 ? 'No payments yet' : 'No matching payments'}
-              </h2>
-              <p className="text-gray-600 mb-6">
-                {paymentsList.length === 0
-                  ? 'Record your first payment to get started'
-                  : 'Try adjusting your search'}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {filteredPayments.map((payment) => {
-              const isPaymentIn = payment.transaction_type === 'payment_in';
-              return (
-                <Card key={payment.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <CreditCard className={`h-5 w-5 ${isPaymentIn ? 'text-green-600' : 'text-red-600'}`} />
-                          {payment.party?.name || payment.invoice?.party?.name || 'Unknown Party'}
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                          {isPaymentIn ? 'Payment Received' : 'Payment Made'}
-                          {payment.invoice?.invoice_number && ` • ${payment.invoice.invoice_number}`}
-                        </CardDescription>
-                      </div>
-                      <div className="text-right">
-                        <p className={`text-2xl font-bold ${isPaymentIn ? 'text-green-600' : 'text-red-600'}`}>
-                          {isPaymentIn ? '+' : '-'}₹{Number(payment.amount || 0).toFixed(2)}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {(payment.payment_mode || 'unknown').toUpperCase().replace('_', ' ')}
-                        </p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-1 text-sm">
-                      <p className="text-gray-600">
-                        <span className="font-medium">Date:</span>{' '}
-                        {payment.transaction_date ? format(new Date(payment.transaction_date), 'dd MMM yyyy') : 'N/A'}
-                      </p>
-                      {payment.reference_number && (
-                        <p className="text-gray-600">
-                          <span className="font-medium">Reference:</span> {payment.reference_number}
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+          {/* Search */}
+          <div className="mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by invoice number, party name, or reference..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
-        )}
-      </main>
-    </div>
-  );
-}
+
+          {/* Payments List */}
+          {paymentsList.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <NoPaymentsEmpty onCreateClick={() => setIsDialogOpen(true)} />
+              </CardContent>
+            </Card>
+          ) : filteredPayments.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <NoSearchResultsEmpty query={searchQuery} onClearClick={() => setSearchQuery('')} />
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {filteredPayments.map((payment) => {
+                const isPaymentIn = payment.transaction_type === 'payment_in';
+                return (
+                  <Card key={payment.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/payments/${payment.id}`)}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 rounded-full ${isPaymentIn ? 'bg-green-100' : 'bg-red-100'}`}>
+                            {isPaymentIn ? (
+                              <ArrowDownLeft className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <ArrowUpRight className="h-5 w-5 text-red-600" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">
+                                {payment.party?.name || payment.invoice?.party?.name || 'Unknown'}
+                              </span>
+                              <Badge variant={isPaymentIn ? 'default' : 'secondary'} className="text-xs">
+                                {isPaymentIn ? 'IN' : 'OUT'}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {payment.payment_mode?.toUpperCase().replace('_', ' ')}
+                              {payment.reference_number && ` • ${payment.reference_number}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right hidden sm:block">
+                            <p className="text-sm text-muted-foreground">
+                              {payment.transaction_date ? format(new Date(payment.transaction_date), 'dd MMM yyyy') : 'N/A'}
+                            </p>
+                            {payment.invoice?.invoice_number && (
+                              <p className="text-xs text-muted-foreground">
+                                {payment.invoice.invoice_number}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-lg font-bold ${isPaymentIn ? 'text-green-600' : 'text-red-600'}`}>
+                              {isPaymentIn ? '+' : '-'}₹{Number(payment.amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            </p>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/payments/${payment.id}`); }}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setDeleteDialog({ open: true, payment, isDeleting: false });
+                                }}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Delete Confirmation Dialog */}
+          <DeleteConfirmDialog
+            open={deleteDialog.open}
+            onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
+            onConfirm={async () => {
+              if (!deleteDialog.payment) return;
+              setDeleteDialog({ ...deleteDialog, isDeleting: true });
+              try {
+                await paymentApi.delete(`/payments/${deleteDialog.payment.id}`);
+                toast.success('Payment deleted successfully');
+                setDeleteDialog({ open: false, payment: null, isDeleting: false });
+                fetchData();
+              } catch (err: any) {
+                toast.error('Failed to delete payment', { 
+                  description: err.response?.data?.message || 'Please try again' 
+                });
+                setDeleteDialog({ ...deleteDialog, isDeleting: false });
+              }
+            }}
+            title="Delete Payment"
+            description={`Are you sure you want to delete this payment of ₹${Number(deleteDialog.payment?.amount || 0).toLocaleString('en-IN')}? This action cannot be undone.`}
+            isDeleting={deleteDialog.isDeleting}
+          />
+
+          {/* Mobile Bottom Nav */}
+          <BottomNav />
+        </AppLayout>
+      );
+    }

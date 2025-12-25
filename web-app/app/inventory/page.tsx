@@ -13,8 +13,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Search, Package, AlertTriangle } from 'lucide-react';
+import { AppLayout, BottomNav } from '@/components/layout';
+import { PageHeader } from '@/components/ui/page-header';
+import { FEATURE_IDS } from '@/lib/services/documentation.service';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { NoItemsEmpty, NoSearchResultsEmpty } from '@/components/ui/empty-state';
+import { Plus, Search, Package, AlertTriangle, MoreVertical, Edit, Eye, Trash2, FileSpreadsheet } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import { exportInventoryToExcel } from '@/lib/export-utils';
 
 // Item form validation schema - aligned with backend CreateItemDto
 // REQUIRED: name, selling_price only
@@ -72,6 +87,11 @@ export default function InventoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showLowStock, setShowLowStock] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; item: Item | null; isDeleting: boolean }>({
+    open: false,
+    item: null,
+    isDeleting: false,
+  });
 
   const form = useForm<ItemFormValues>({
     resolver: zodResolver(itemSchema),
@@ -157,52 +177,34 @@ export default function InventoryPage() {
     return matchesSearch && matchesCategory && matchesLowStock;
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading inventory...</p>
-        </div>
-      </div>
-    );
-  }
+  // Stats
+  const totalValue = itemsList.reduce((sum, item) => 
+    sum + (Number(item.current_stock || 0) * Number(item.selling_price || 0)), 0);
+  const lowStockCount = itemsList.filter(item => 
+    item.low_stock_threshold && (item.current_stock || 0) <= item.low_stock_threshold).length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/dashboard')}
-                className="mr-4"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage items and stock</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => router.push('/inventory/stock')}
-              >
-                Stock Adjustment
-              </Button>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Item
-                  </Button>
-                </DialogTrigger>
+    <AppLayout>
+      <PageHeader
+        title="Inventory"
+        description="Manage products, services, and stock"
+        helpFeatureId={FEATURE_IDS.INVENTORY_OVERVIEW}
+      >
+        <Button 
+          variant="outline" 
+          onClick={() => exportInventoryToExcel(itemsList)}
+          disabled={itemsList.length === 0}
+        >
+          <FileSpreadsheet className="h-4 w-4 mr-2" />
+          Export Excel
+        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
+          </DialogTrigger>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Add New Item</DialogTitle>
@@ -302,7 +304,13 @@ export default function InventoryPage() {
                           name="tax_rate"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>GST Rate (%)</FormLabel>
+                              <div className="flex items-center gap-2">
+                                <FormLabel>GST Rate (%)</FormLabel>
+                                <HelpTooltip
+                                  content="Select the applicable GST rate for this item. Common rates: 0% (exempt), 5%, 12%, 18%, 28%. This rate will be used when creating invoices."
+                                  title="GST Rate"
+                                />
+                              </div>
                               <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
                                   <SelectTrigger>
@@ -373,7 +381,13 @@ export default function InventoryPage() {
                           name="min_stock_level"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Min Stock Level</FormLabel>
+                              <div className="flex items-center gap-2">
+                                <FormLabel>Min Stock Level</FormLabel>
+                                <HelpTooltip
+                                  content="Set the minimum stock level. You'll receive alerts when stock falls below this level. Helps prevent stockouts."
+                                  title="Minimum Stock Level"
+                                />
+                              </div>
                               <FormControl>
                                 <Input type="number" step="0.01" placeholder="10" {...field} />
                               </FormControl>
@@ -400,122 +414,192 @@ export default function InventoryPage() {
                   </Form>
                 </DialogContent>
               </Dialog>
-            </div>
-          </div>
-        </div>
-      </header>
+            </PageHeader>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search and Filter */}
-        <div className="mb-6 flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search items by name, description, or HSN code..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Total Items</div>
+                <div className="text-2xl font-bold">{itemsList.length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Stock Value</div>
+                <div className="text-2xl font-bold text-green-600">
+                  ₹{totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Low Stock</div>
+                <div className="text-2xl font-bold text-orange-600">{lowStockCount}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-sm text-muted-foreground">Categories</div>
+                <div className="text-2xl font-bold text-blue-600">{categories.length}</div>
+              </CardContent>
+            </Card>
           </div>
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category} value={category || ''}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant={showLowStock ? 'default' : 'outline'}
-            onClick={() => setShowLowStock(!showLowStock)}
+
+          {/* Search and Filter */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search items by name, description, or HSN code..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category || ''}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant={showLowStock ? 'default' : 'outline'}
+              onClick={() => setShowLowStock(!showLowStock)}
           >
             <AlertTriangle className="h-4 w-4 mr-2" />
             Low Stock
           </Button>
-        </div>
-
-        {/* Items List */}
-        {filteredItems.length === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">
-                {itemsList.length === 0 ? 'No items yet' : 'No matching items'}
-              </h2>
-              <p className="text-gray-600 mb-6">
-                {itemsList.length === 0
-                  ? 'Add your first item to get started'
-                  : 'Try adjusting your search or filter'}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map((item) => {
-              const isLowStock = item.low_stock_threshold && (item.current_stock || 0) <= item.low_stock_threshold;
-              return (
-                <Card key={item.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <CardTitle className="flex justify-between items-start">
-                      <span className="flex-1">{item.name}</span>
-                      {isLowStock && (
-                        <AlertTriangle className="h-4 w-4 text-orange-500 ml-2" />
-                      )}
-                    </CardTitle>
-                    {item.description && (
-                      <CardDescription>{item.description}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      {item.category && (
-                        <p className="text-gray-600">
-                          <span className="font-medium">Category:</span> {item.category}
-                        </p>
-                      )}
-                      {item.hsn_code && (
-                        <p className="text-gray-600">
-                        <span className="font-medium">HSN:</span> {item.hsn_code}
-                      </p>
-                    )}
-                    <p className="text-gray-600">
-                      <span className="font-medium">Unit:</span> {item.unit?.toUpperCase() || 'N/A'}
-                    </p>
-                    <div className="pt-2 border-t">
-                      <p className="text-lg font-semibold text-green-600">
-                        ₹{Number(item.selling_price || 0).toFixed(2)}
-                      </p>
-                      {item.purchase_price && (
-                          <p className="text-sm text-gray-500">
-                            Cost: ₹{Number(item.purchase_price || 0).toFixed(2)}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-500">GST: {item.tax_rate || 0}%</p>
-                      </div>
-                      <div className="pt-2 border-t">
-                        <p className={`font-medium ${isLowStock ? 'text-orange-600' : 'text-blue-600'}`}>
-                          Stock: {item.current_stock || 0} {item.unit || ''}
-                        </p>
-                        {item.low_stock_threshold && (
-                          <p className="text-xs text-gray-500">
-                            Min level: {item.low_stock_threshold} {item.unit || ''}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
           </div>
-        )}
-      </main>
-    </div>
-  );
-}
+
+          {/* Loading State */}
+          {isLoading ? (
+            <TableSkeleton rows={5} columns={4} />
+          ) : itemsList.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <NoItemsEmpty onCreateClick={() => setIsDialogOpen(true)} />
+              </CardContent>
+            </Card>
+          ) : filteredItems.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <NoSearchResultsEmpty query={searchQuery} onClearClick={() => setSearchQuery('')} />
+              </CardContent>
+            </Card>
+          ) : (
+            /* Items Grid */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredItems.map((item) => {
+                const isLowStock = item.low_stock_threshold && (item.current_stock || 0) <= item.low_stock_threshold;
+                return (
+                  <Card key={item.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/inventory/${item.id}`)}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-full ${isLowStock ? 'bg-orange-100' : 'bg-green-100'}`}>
+                            <Package className={`h-5 w-5 ${isLowStock ? 'text-orange-600' : 'text-green-600'}`} />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base flex items-center gap-2">
+                              {item.name}
+                              {isLowStock && (
+                                <Badge variant="destructive" className="text-xs">Low Stock</Badge>
+                              )}
+                            </CardTitle>
+                            {item.hsn_code && (
+                              <p className="text-xs text-muted-foreground">HSN: {item.hsn_code}</p>
+                            )}
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/inventory/${item.id}`); }}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/inventory/${item.id}/edit`); }}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Item
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setDeleteDialog({ open: true, item, isDeleting: false });
+                              }}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Selling Price</p>
+                          <p className="font-semibold text-green-600">
+                            ₹{Number(item.selling_price || 0).toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Stock</p>
+                          <p className={`font-semibold ${isLowStock ? 'text-orange-600' : ''}`}>
+                            {item.current_stock || 0} {item.unit || 'pcs'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t flex justify-between items-center text-xs text-muted-foreground">
+                        <span>GST: {item.tax_rate || 0}%</span>
+                        {item.category && <Badge variant="outline">{item.category}</Badge>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Delete Confirmation Dialog */}
+          <DeleteConfirmDialog
+            open={deleteDialog.open}
+            onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
+            onConfirm={async () => {
+              if (!deleteDialog.item) return;
+              setDeleteDialog({ ...deleteDialog, isDeleting: true });
+              try {
+                await inventoryApi.delete(`/items/${deleteDialog.item.id}`);
+                toast.success('Item deleted successfully');
+                setDeleteDialog({ open: false, item: null, isDeleting: false });
+                fetchItems();
+              } catch (err: any) {
+                toast.error('Failed to delete item', { 
+                  description: err.response?.data?.message || 'Please try again' 
+                });
+                setDeleteDialog({ ...deleteDialog, isDeleting: false });
+              }
+            }}
+            title="Delete Item"
+            itemName={deleteDialog.item?.name}
+            isDeleting={deleteDialog.isDeleting}
+          />
+
+          {/* Mobile Bottom Nav */}
+          <BottomNav />
+        </AppLayout>
+      );
+    }

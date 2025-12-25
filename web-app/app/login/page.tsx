@@ -80,7 +80,8 @@ export default function LoginPage() {
         otp: otp,
       });
 
-      const { access_token, refresh_token, user } = response.data;
+      const { tokens, user } = response.data;
+      const { access_token, refresh_token } = tokens;
 
       // Store tokens
       tokenStorage.setAccessToken(access_token);

@@ -22,6 +22,7 @@ import {
   InvoiceResponseDto,
 } from '@business-app/shared/dto';
 import { Invoice } from '../entities/invoice.entity';
+import { validateOptionalUUID } from '@business-app/shared/utils';
 
 @ApiTags('Invoices')
 @Controller('api/v1/invoices')
@@ -44,14 +45,32 @@ export class InvoiceController {
     @Request() req: any,
     @Body() createDto: CreateInvoiceDto
   ): Promise<InvoiceResponseDto> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
-    const userId = req.user?.id || 'user-1'; // Mock for now
+    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
+    const userId = req.headers['x-user-id'] || req.user?.id || '00000000-0000-0000-0000-000000000001';
     const invoice = await this.invoiceService.create(
       businessId,
       userId,
       createDto
     );
     return this.toResponseDto(invoice);
+  }
+
+  @Get('new')
+  @ApiOperation({ summary: 'Get default data for new invoice form' })
+  @ApiResponse({
+    status: 200,
+    description: 'Default invoice data',
+  })
+  async getNewInvoiceData(): Promise<{
+    defaultInvoiceType: string;
+    defaultStatus: string;
+    defaultPaymentStatus: string;
+  }> {
+    return {
+      defaultInvoiceType: 'sale',
+      defaultStatus: 'draft',
+      defaultPaymentStatus: 'unpaid',
+    };
   }
 
   @Get()
@@ -77,7 +96,12 @@ export class InvoiceController {
     page: number;
     limit: number;
   }> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
+    // Validate UUID query parameters
+    if (partyId) {
+      validateOptionalUUID(partyId, 'partyId');
+    }
+
+    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
     const result = await this.invoiceService.findByBusinessId(businessId, {
       partyId,
       invoiceType,
@@ -105,12 +129,16 @@ export class InvoiceController {
     description: 'Invoice details',
     type: InvoiceResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid UUID format' })
   @ApiResponse({ status: 404, description: 'Invoice not found' })
   async findOne(
     @Request() req: any,
     @Param('id') id: string
   ): Promise<InvoiceResponseDto> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
+    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
     const invoice = await this.invoiceService.findById(businessId, id);
     return this.toResponseDto(invoice);
   }

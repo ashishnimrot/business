@@ -10,4 +10,5 @@ export * from './phone-validator';
 export * from './currency-formatter';
 export * from './swagger.config';
 export * from './date-formatter';
+export * from './uuid-validator';
 
