@@ -2,10 +2,12 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AppLayout, BottomNav } from '@/components/layout';
 import { 
   Users, 
   Package, 
@@ -13,9 +15,14 @@ import {
   CreditCard, 
   BarChart3,
   Building2,
-  LogOut,
   TrendingUp,
-  AlertCircle
+  TrendingDown,
+  AlertCircle,
+  Plus,
+  ArrowUpRight,
+  ArrowDownRight,
+  Clock,
+  IndianRupee,
 } from 'lucide-react';
 import { invoiceApi, paymentApi, partyApi, inventoryApi } from '@/lib/api-client';
 
@@ -151,162 +158,252 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Business Manager</h1>
-              <p className="text-sm text-gray-600 mt-1">Welcome to your dashboard</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                onClick={() => router.push('/business/select')}
-              >
-                <Building2 className="h-4 w-4 mr-2" />
-                Switch Business
-              </Button>
-              <Button variant="outline" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <AppLayout>
+      {/* Welcome Section */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-foreground">Welcome back!</h1>
+        <p className="text-muted-foreground mt-1">Here&apos;s what&apos;s happening with your business today.</p>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Quick Access</h2>
-          <p className="text-gray-600">Select a module to get started</p>
-        </div>
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardDescription className="text-sm font-medium">Total Sales</CardDescription>
+            <div className="p-2 bg-green-100 rounded-full">
+              <TrendingUp className="h-4 w-4 text-green-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              ₹{stats.totalSales.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {invoicesList.filter((inv: any) => inv.invoice_type === 'sale').length} invoices
+            </p>
+          </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {modules.map((module) => (
-            <Card
-              key={module.href}
-              className="cursor-pointer hover:shadow-lg transition-all hover:-translate-y-1"
-              onClick={() => router.push(module.href)}
-            >
-              <CardHeader>
-                <div className={`w-12 h-12 rounded-lg ${module.bgColor} flex items-center justify-center mb-4`}>
-                  <module.icon className={`h-6 w-6 ${module.color}`} />
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardDescription className="text-sm font-medium">Outstanding</CardDescription>
+            <div className="p-2 bg-orange-100 rounded-full">
+              <Clock className="h-4 w-4 text-orange-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              ₹{outstandingReceivables.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.pendingInvoices} pending
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardDescription className="text-sm font-medium">Total Parties</CardDescription>
+            <div className="p-2 bg-blue-100 rounded-full">
+              <Users className="h-4 w-4 text-blue-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalParties}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.totalCustomers} customers
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardDescription className="text-sm font-medium">Low Stock</CardDescription>
+            <div className={`p-2 rounded-full ${stats.lowStockItems > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
+              <AlertCircle className={`h-4 w-4 ${stats.lowStockItems > 0 ? 'text-red-600' : 'text-green-600'}`} />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${stats.lowStockItems > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {stats.lowStockItems}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.lowStockItems > 0 ? 'Need attention' : 'All good'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Link href="/invoices/create">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                  <Plus className="h-5 w-5 text-blue-600" />
                 </div>
-                <CardTitle>{module.title}</CardTitle>
-                <CardDescription>{module.description}</CardDescription>
-              </CardHeader>
+                <div>
+                  <p className="font-medium">New Invoice</p>
+                  <p className="text-xs text-muted-foreground">Create sale or purchase</p>
+                </div>
+              </CardContent>
             </Card>
+          </Link>
+
+          <Link href="/parties/new">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
+                  <Users className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Add Party</p>
+                  <p className="text-xs text-muted-foreground">Customer or supplier</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/inventory/new">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                  <Package className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Add Item</p>
+                  <p className="text-xs text-muted-foreground">New inventory item</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/payments/new">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
+                  <CreditCard className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Record Payment</p>
+                  <p className="text-xs text-muted-foreground">Receive or pay</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+      </div>
+
+      {/* Modules Grid */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4">Modules</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {modules.map((module) => (
+            <Link key={module.href} href={module.href}>
+              <Card className="hover:shadow-md transition-all hover:-translate-y-1 cursor-pointer h-full">
+                <CardContent className="flex flex-col items-center justify-center p-6 text-center">
+                  <div className={`w-12 h-12 rounded-xl ${module.bgColor} flex items-center justify-center mb-3`}>
+                    <module.icon className={`h-6 w-6 ${module.color}`} />
+                  </div>
+                  <p className="font-medium text-sm">{module.title}</p>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
+      </div>
 
-        {/* Stats Section */}
-        <div className="mt-12">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Business Overview</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription>Total Sales</CardDescription>
-                  <TrendingUp className="h-4 w-4 text-green-600" />
-                </div>
-                <CardTitle className="text-3xl text-green-600">
-                  ₹{stats.totalSales.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-gray-600">
-                  {invoices?.filter((inv: any) => inv.invoice_type === 'sale').length || 0} sale invoices
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription>Outstanding</CardDescription>
-                  <CreditCard className="h-4 w-4 text-orange-600" />
-                </div>
-                <CardTitle className="text-3xl text-orange-600">
-                  ₹{outstandingReceivables.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-gray-600">{stats.pendingInvoices} pending invoices</p>
-              </CardContent>
-            </Card>
+      {/* Recent Activity & Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Financial Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Financial Summary</CardTitle>
+            <CardDescription>Your business at a glance</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-3">
+                <ArrowUpRight className="h-4 w-4 text-green-600" />
+                <span className="text-sm">Total Sales</span>
+              </div>
+              <span className="font-medium text-green-600">
+                ₹{stats.totalSales.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-3">
+                <ArrowDownRight className="h-4 w-4 text-red-600" />
+                <span className="text-sm">Total Purchases</span>
+              </div>
+              <span className="font-medium text-red-600">
+                ₹{stats.totalPurchases.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-3">
+                <IndianRupee className="h-4 w-4 text-green-600" />
+                <span className="text-sm">Payments Received</span>
+              </div>
+              <span className="font-medium text-green-600">
+                ₹{stats.totalPaymentsReceived.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-3">
+                <IndianRupee className="h-4 w-4 text-red-600" />
+                <span className="text-sm">Payments Made</span>
+              </div>
+              <span className="font-medium text-red-600">
+                ₹{stats.totalPaymentsMade.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription>Total Parties</CardDescription>
-                  <Users className="h-4 w-4 text-blue-600" />
-                </div>
-                <CardTitle className="text-3xl">{stats.totalParties}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-gray-600">
-                  {stats.totalCustomers} customers, {stats.totalSuppliers} suppliers
-                </p>
-              </CardContent>
-            </Card>
+        {/* Inventory & Party Stats */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Business Stats</CardTitle>
+            <CardDescription>Inventory and parties overview</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-3">
+                <Package className="h-4 w-4 text-purple-600" />
+                <span className="text-sm">Total Items</span>
+              </div>
+              <span className="font-medium">{stats.totalItems}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-3">
+                <Users className="h-4 w-4 text-blue-600" />
+                <span className="text-sm">Customers</span>
+              </div>
+              <span className="font-medium">{stats.totalCustomers}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-3">
+                <Users className="h-4 w-4 text-orange-600" />
+                <span className="text-sm">Suppliers</span>
+              </div>
+              <span className="font-medium">{stats.totalSuppliers}</span>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-3">
+                <FileText className="h-4 w-4 text-indigo-600" />
+                <span className="text-sm">Total Invoices</span>
+              </div>
+              <span className="font-medium">{stats.totalInvoices}</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription>Low Stock Items</CardDescription>
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                </div>
-                <CardTitle className={`text-3xl ${stats.lowStockItems > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {stats.lowStockItems}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className={`text-xs ${stats.lowStockItems > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {stats.lowStockItems > 0 ? 'Needs attention' : 'All items in stock'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Additional Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Total Items</CardDescription>
-                <CardTitle className="text-3xl">{stats.totalItems}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-gray-600">In inventory</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Total Invoices</CardDescription>
-                <CardTitle className="text-3xl">{stats.totalInvoices}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-gray-600">All transactions</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Payments Received</CardDescription>
-                <CardTitle className="text-3xl text-green-600">
-                  ₹{stats.totalPaymentsReceived.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-gray-600">From customers</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </main>
-    </div>
+      {/* Mobile Bottom Navigation */}
+      <BottomNav />
+    </AppLayout>
   );
 }
