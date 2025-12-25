@@ -9,6 +9,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +17,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { AuthGuard } from '../guards/auth.guard';
 import { InvoiceService } from '../services/invoice.service';
 import {
   CreateInvoiceDto,
@@ -26,7 +28,7 @@ import { validateOptionalUUID } from '@business-app/shared/utils';
 
 @ApiTags('Invoices')
 @Controller('api/v1/invoices')
-// @UseGuards(JwtAuthGuard) // TODO: Add when shared guard is ready
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
@@ -45,8 +47,14 @@ export class InvoiceController {
     @Request() req: any,
     @Body() createDto: CreateInvoiceDto
   ): Promise<InvoiceResponseDto> {
-    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
-    const userId = req.headers['x-user-id'] || req.user?.id || '00000000-0000-0000-0000-000000000001';
+    const businessId = req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
     const invoice = await this.invoiceService.create(
       businessId,
       userId,

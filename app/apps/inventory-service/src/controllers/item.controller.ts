@@ -11,6 +11,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,6 +20,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { AuthGuard } from '../guards/auth.guard';
 import { ItemService } from '../services/item.service';
 import {
   CreateItemDto,
@@ -30,7 +32,7 @@ import { Item } from '../entities/item.entity';
 
 @ApiTags('Items')
 @Controller('api/v1/items')
-// @UseGuards(JwtAuthGuard) // TODO: Add when shared guard is ready
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class ItemController {
   constructor(private readonly itemService: ItemService) {}
@@ -49,7 +51,10 @@ export class ItemController {
     @Request() req: any,
     @Body() createDto: CreateItemDto
   ): Promise<ItemResponseDto> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Valid UUID mock
+    const businessId = req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
     const item = await this.itemService.create(businessId, createDto);
     return this.toResponseDto(item);
   }

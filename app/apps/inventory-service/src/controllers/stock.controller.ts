@@ -8,6 +8,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,13 +16,14 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { AuthGuard } from '../guards/auth.guard';
 import { StockService } from '../services/stock.service';
 import { StockAdjustmentDto } from '@business-app/shared/dto';
 import { StockAdjustment } from '../entities/stock-adjustment.entity';
 
 @ApiTags('Stock')
 @Controller('api/v1/stock')
-// @UseGuards(JwtAuthGuard) // TODO: Add when shared guard is ready
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class StockController {
   constructor(private readonly stockService: StockService) {}
@@ -42,8 +44,14 @@ export class StockController {
     item: any;
     adjustment: StockAdjustment;
   }> {
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
+    const businessId = req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
     const userId = req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
     return this.stockService.adjustStock(businessId, adjustmentDto, userId);
   }
 

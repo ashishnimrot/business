@@ -17,6 +17,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { AuthGuard } from '../guards/auth.guard';
 import { PaymentService } from '../services/payment.service';
 import {
   CreatePaymentDto,
@@ -27,7 +28,7 @@ import { validateOptionalUUID } from '@business-app/shared/utils';
 
 @ApiTags('Payments')
 @Controller('api/v1/payments')
-// @UseGuards(JwtAuthGuard) // TODO: Add when shared guard is ready
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
@@ -45,9 +46,14 @@ export class PaymentController {
     @Request() req: any,
     @Body() createDto: CreatePaymentDto
   ): Promise<PaymentResponseDto> {
-    // Extract business_id from header (x-business-id) or fallback to mock
-    const businessId = req.headers['x-business-id'] || req.business_id || '00000000-0000-0000-0000-000000000001';
-    const userId = req.headers['x-user-id'] || req.user?.id || '00000000-0000-0000-0000-000000000001';
+    const businessId = req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('User ID is required');
+    }
     const transaction = await this.paymentService.recordPayment(
       businessId,
       userId,

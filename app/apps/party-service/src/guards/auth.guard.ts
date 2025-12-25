@@ -12,7 +12,7 @@ import { Request } from 'express';
  * JWT Auth Guard
  * 
  * Validates JWT access tokens and extracts user ID from token.
- * This ensures each user only sees their own businesses.
+ * This ensures each user only sees their own data.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {

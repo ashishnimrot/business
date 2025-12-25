@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { ItemController } from './controllers/item.controller';
 import { StockController } from './controllers/stock.controller';
 import { HealthController } from './controllers/health.controller';
@@ -14,11 +15,22 @@ import { Item } from './entities/item.entity';
 import { Category } from './entities/category.entity';
 import { Unit } from './entities/unit.entity';
 import { StockAdjustment } from './entities/stock-adjustment.entity';
+import { AuthGuard } from './guards/auth.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET', 'default-secret'),
+        signOptions: {
+          expiresIn: '15m',
+        },
+      }),
+      inject: [ConfigService],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -45,6 +57,7 @@ import { StockAdjustment } from './entities/stock-adjustment.entity';
     CategoryRepository,
     UnitRepository,
     StockAdjustmentRepository,
+    AuthGuard,
   ],
 })
 export class AppModule {}

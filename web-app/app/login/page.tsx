@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Send OTP
+  // Send OTP with auto-detection for new users
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -34,10 +34,25 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      const response = await authApi.post('/auth/send-otp', {
-        phone: phone,
-        purpose: 'login',
-      });
+      // First try with 'login' purpose
+      let response;
+      try {
+        response = await authApi.post('/auth/send-otp', {
+          phone: phone,
+          purpose: 'login',
+        });
+      } catch (loginError: any) {
+        // If user not found, automatically try registration
+        if (loginError.response?.status === 400 && 
+            loginError.response?.data?.message?.includes('User not found')) {
+          response = await authApi.post('/auth/send-otp', {
+            phone: phone,
+            purpose: 'registration',
+          });
+        } else {
+          throw loginError;
+        }
+      }
       
       // Store otp_id and display OTP for testing
       const { otp_id, otp: receivedOtp } = response.data;
@@ -80,7 +95,7 @@ export default function LoginPage() {
         otp: otp,
       });
 
-      const { tokens, user } = response.data;
+      const { tokens, user, is_new_user } = response.data;
       const { access_token, refresh_token } = tokens;
 
       // Store tokens
@@ -90,8 +105,8 @@ export default function LoginPage() {
       // Set user in store
       setUser({ id: user.id, phone: user.phone });
 
-      toast.success('Login successful', {
-        description: 'Welcome back!',
+      toast.success(is_new_user ? 'Registration successful!' : 'Login successful', {
+        description: is_new_user ? 'Welcome! Let\'s set up your business.' : 'Welcome back!',
       });
 
       // Redirect to business selection
@@ -107,14 +122,29 @@ export default function LoginPage() {
     }
   };
 
-  // Resend OTP
+  // Resend OTP with auto-detection for new users
   const handleResendOtp = async () => {
     setIsLoading(true);
     try {
-      const response = await authApi.post('/auth/send-otp', {
-        phone,
-        purpose: 'login',
-      });
+      // Try login first, fallback to registration
+      let response;
+      try {
+        response = await authApi.post('/auth/send-otp', {
+          phone,
+          purpose: 'login',
+        });
+      } catch (loginError: any) {
+        // If user not found, automatically try registration
+        if (loginError.response?.status === 400 && 
+            loginError.response?.data?.message?.includes('User not found')) {
+          response = await authApi.post('/auth/send-otp', {
+            phone,
+            purpose: 'registration',
+          });
+        } else {
+          throw loginError;
+        }
+      }
       
       // Store new otp_id and display OTP
       const { otp_id, otp: receivedOtp } = response.data;
@@ -161,7 +191,7 @@ export default function LoginPage() {
                     type="tel"
                     placeholder="9876543210"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                     className="rounded-l-none"
                     maxLength={10}
                     disabled={isLoading}

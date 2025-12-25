@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { InvoiceController } from './controllers/invoice.controller';
 import { HealthController } from './controllers/health.controller';
 import { InvoiceService } from './services/invoice.service';
@@ -10,11 +11,22 @@ import { InvoiceItemRepository } from './repositories/invoice-item.repository';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoiceSettings } from './entities/invoice-settings.entity';
+import { AuthGuard } from './guards/auth.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET', 'default-secret'),
+        signOptions: {
+          expiresIn: '15m',
+        },
+      }),
+      inject: [ConfigService],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -38,6 +50,7 @@ import { InvoiceSettings } from './entities/invoice-settings.entity';
     InvoiceService,
     InvoiceRepository,
     InvoiceItemRepository,
+    AuthGuard,
   ],
 })
 export class AppModule {}

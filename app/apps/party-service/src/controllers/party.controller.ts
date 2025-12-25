@@ -11,6 +11,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,7 +20,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-// import { JwtAuthGuard } from '@business-app/shared/dal'; // Will be shared guard
+import { AuthGuard } from '../guards/auth.guard';
 import { PartyService } from '../services/party.service';
 import { PartyLedgerService } from '../services/party-ledger.service';
 import {
@@ -33,7 +34,7 @@ import { validateOptionalUUID } from '@business-app/shared/utils';
 
 @ApiTags('Party')
 @Controller('api/v1/parties')
-// @UseGuards(JwtAuthGuard) // TODO: Add when shared guard is ready
+@UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class PartyController {
   constructor(
@@ -55,8 +56,10 @@ export class PartyController {
     @Request() req: any,
     @Body() createDto: CreatePartyDto
   ): Promise<PartyResponseDto> {
-    // TODO: Get business_id from request (from JWT or business context)
-    const businessId = req.business_id || '00000000-0000-0000-0000-000000000001'; // Mock for now
+    const businessId = req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
     const party = await this.partyService.create(businessId, createDto);
     return this.toResponseDto(party);
   }

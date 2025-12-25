@@ -1,16 +1,28 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { PaymentController } from './controllers/payment.controller';
 import { HealthController } from './controllers/health.controller';
 import { PaymentService } from './services/payment.service';
 import { TransactionRepository } from './repositories/transaction.repository';
 import { Transaction } from './entities/transaction.entity';
+import { AuthGuard } from './guards/auth.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET', 'default-secret'),
+        signOptions: {
+          expiresIn: '15m',
+        },
+      }),
+      inject: [ConfigService],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -30,7 +42,7 @@ import { Transaction } from './entities/transaction.entity';
     TypeOrmModule.forFeature([Transaction]),
   ],
   controllers: [PaymentController, HealthController],
-  providers: [PaymentService, TransactionRepository],
+  providers: [PaymentService, TransactionRepository, AuthGuard],
 })
 export class AppModule {}
 
