@@ -250,10 +250,12 @@ export function attachLogger(client: AxiosInstance, serviceName: string): void {
   client.interceptors.response.use(
     (response: AxiosResponse) => {
       const requestId = (response.config as unknown as { __requestId?: string })?.__requestId;
-      const startTime = requestTimestamps.get(requestId);
+      const startTime = requestId ? requestTimestamps.get(requestId) : undefined;
       const duration = startTime ? Date.now() - startTime : 0;
       
-      requestTimestamps.delete(requestId);
+      if (requestId) {
+        requestTimestamps.delete(requestId);
+      }
       
       const entry: LogEntry = {
         id: requestId || generateRequestId(),
@@ -274,10 +276,12 @@ export function attachLogger(client: AxiosInstance, serviceName: string): void {
     },
     (error: AxiosError) => {
       const requestId = (error.config as unknown as { __requestId?: string })?.__requestId;
-      const startTime = requestTimestamps.get(requestId);
+      const startTime = requestId ? requestTimestamps.get(requestId) : undefined;
       const duration = startTime ? Date.now() - startTime : 0;
       
-      requestTimestamps.delete(requestId);
+      if (requestId) {
+        requestTimestamps.delete(requestId);
+      }
 
       // Categorize the error
       const status = error.response?.status;
