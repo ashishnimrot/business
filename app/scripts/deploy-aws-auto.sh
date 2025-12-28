@@ -7,30 +7,53 @@ KEY_NAME=${2:-business-app-key}
 INSTANCE_TYPE=${3:-t3.small}
 GIT_REPO="https://github.com/ashishnimrot/business.git"
 
+# AWS Profile support (can be set via environment variable or passed as 4th argument)
+AWS_PROFILE=${AWS_PROFILE:-${4:-}}
+AWS_CMD="aws"
+if [ -n "$AWS_PROFILE" ]; then
+    AWS_CMD="aws --profile $AWS_PROFILE"
+    export AWS_PROFILE
+fi
+
 echo "🚀 Automated AWS Deployment for Business App"
 echo "=============================================="
 echo "Region: $REGION"
 echo "Key Name: $KEY_NAME"
 echo "Instance Type: $INSTANCE_TYPE"
+if [ -n "$AWS_PROFILE" ]; then
+    echo "AWS Profile: $AWS_PROFILE"
+fi
 echo "Git Repo: $GIT_REPO"
 echo ""
 
 # Step 1: Verify AWS credentials
 echo "🔍 Step 1/8: Verifying AWS credentials..."
-if ! aws sts get-caller-identity &>/dev/null; then
+if ! $AWS_CMD sts get-caller-identity &>/dev/null; then
     echo "❌ AWS credentials not configured"
-    echo "Run: aws configure"
+    if [ -n "$AWS_PROFILE" ]; then
+        echo "Profile '$AWS_PROFILE' not found or invalid"
+        echo "Run: aws configure --profile $AWS_PROFILE"
+    else
+        echo "Run: aws configure"
+        echo "Or set AWS_PROFILE environment variable: export AWS_PROFILE=business-app"
+    fi
     exit 1
 fi
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT_ID=$($AWS_CMD sts get-caller-identity --query Account --output text)
+USER_ARN=$($AWS_CMD sts get-caller-identity --query Arn --output text)
 echo "✅ AWS Account: $ACCOUNT_ID"
+echo "✅ User: $USER_ARN"
 echo ""
 
 # Step 2: Setup IAM (if needed)
 echo "🔐 Step 2/8: Setting up IAM user..."
-if ! aws iam get-user --user-name business-app-deployer &>/dev/null; then
-    echo "Creating IAM user..."
-    aws iam create-user --user-name business-app-deployer &>/dev/null
+IAM_USER_EXISTS=false
+if $AWS_CMD iam get-user --user-name business-app-deployer &>/dev/null 2>&1; then
+    IAM_USER_EXISTS=true
+    echo "✅ IAM user 'business-app-deployer' already exists"
+elif $AWS_CMD iam create-user --user-name business-app-deployer &>/dev/null 2>&1; then
+    echo "✅ IAM user 'business-app-deployer' created"
+    IAM_USER_EXISTS=true
     
     # Create and attach policy
     cat > /tmp/business-app-policy.json << 'POLICY_EOF'
@@ -50,25 +73,28 @@ if ! aws iam get-user --user-name business-app-deployer &>/dev/null; then
 }
 POLICY_EOF
     
-    POLICY_ARN=$(aws iam create-policy \
+    # Try to create policy, or use existing one
+    POLICY_ARN=$($AWS_CMD iam create-policy \
         --policy-name BusinessAppDeployPolicy \
         --policy-document file:///tmp/business-app-policy.json \
         --query 'Policy.Arn' --output text 2>/dev/null || \
-        aws iam list-policies --query 'Policies[?PolicyName==`BusinessAppDeployPolicy`].Arn' --output text | head -1)
+        $AWS_CMD iam list-policies --query 'Policies[?PolicyName==`BusinessAppDeployPolicy`].Arn' --output text 2>/dev/null | head -1)
     
-    aws iam attach-user-policy --user-name business-app-deployer --policy-arn "$POLICY_ARN" &>/dev/null
-    echo "✅ IAM user created"
+    if [ -n "$POLICY_ARN" ] && [ "$POLICY_ARN" != "None" ]; then
+        $AWS_CMD iam attach-user-policy --user-name business-app-deployer --policy-arn "$POLICY_ARN" &>/dev/null 2>&1 || true
+    fi
 else
-    echo "✅ IAM user exists"
+    echo "⚠️  Could not create IAM user (may already exist or insufficient permissions)"
+    echo "   Continuing with existing credentials..."
 fi
 echo ""
 
 # Step 3: Create/Check Key Pair
 echo "🔑 Step 3/8: Setting up Key Pair..."
-if ! aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &>/dev/null; then
+if ! $AWS_CMD ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &>/dev/null; then
     echo "Creating key pair..."
     mkdir -p ~/.ssh
-    aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > ~/.ssh/$KEY_NAME.pem
+    $AWS_CMD ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > ~/.ssh/$KEY_NAME.pem
     chmod 400 ~/.ssh/$KEY_NAME.pem
     echo "✅ Key pair created: ~/.ssh/$KEY_NAME.pem"
 else
@@ -78,47 +104,71 @@ echo ""
 
 # Step 4: Get VPC and Subnet
 echo "🌐 Step 4/8: Finding VPC and Subnet..."
-VPC_ID=$(aws ec2 describe-vpcs --region $REGION --filters "Name=isDefault,Values=true" --query 'Vpcs[0].VpcId' --output text)
+VPC_ID=$($AWS_CMD ec2 describe-vpcs --region $REGION --filters "Name=isDefault,Values=true" --query 'Vpcs[0].VpcId' --output text)
 if [ "$VPC_ID" = "None" ] || [ -z "$VPC_ID" ]; then
-    VPC_ID=$(aws ec2 describe-vpcs --region $REGION --query 'Vpcs[0].VpcId' --output text)
+    VPC_ID=$($AWS_CMD ec2 describe-vpcs --region $REGION --query 'Vpcs[0].VpcId' --output text)
 fi
-SUBNET_ID=$(aws ec2 describe-subnets --region $REGION --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[0].SubnetId' --output text)
+
+if [ "$VPC_ID" = "None" ] || [ -z "$VPC_ID" ]; then
+    echo "❌ No VPC found in region $REGION"
+    exit 1
+fi
+
+SUBNET_ID=$($AWS_CMD ec2 describe-subnets --region $REGION --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[0].SubnetId' --output text)
+if [ "$SUBNET_ID" = "None" ] || [ -z "$SUBNET_ID" ]; then
+    echo "❌ No subnet found in VPC $VPC_ID"
+    exit 1
+fi
 echo "✅ VPC: $VPC_ID, Subnet: $SUBNET_ID"
 echo ""
 
 # Step 5: Create Security Group
 echo "🔒 Step 5/8: Creating Security Group..."
-SG_ID=$(aws ec2 create-security-group \
+SG_ID=$($AWS_CMD ec2 create-security-group \
     --region $REGION \
     --group-name business-app-beta-sg \
     --description "Business App Beta - Web App Public" \
     --vpc-id $VPC_ID \
-    --query 'GroupId' --output text 2>/dev/null || \
-    aws ec2 describe-security-groups --region $REGION \
-    --filters "Name=group-name,Values=business-app-beta-sg" \
-    --query 'SecurityGroups[0].GroupId' --output text)
+    --query 'GroupId' --output text 2>/dev/null)
+
+if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
+    echo "Security group may already exist, trying to find it..."
+    SG_ID=$($AWS_CMD ec2 describe-security-groups --region $REGION \
+        --filters "Name=group-name,Values=business-app-beta-sg" "Name=vpc-id,Values=$VPC_ID" \
+        --query 'SecurityGroups[0].GroupId' --output text)
+fi
+
+if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
+    echo "❌ Failed to create or find security group"
+    exit 1
+fi
 
 # Configure security group rules
-aws ec2 authorize-security-group-ingress --region $REGION --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 2>/dev/null || true
-aws ec2 authorize-security-group-ingress --region $REGION --group-id $SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0 2>/dev/null || true
-aws ec2 authorize-security-group-ingress --region $REGION --group-id $SG_ID --protocol tcp --port 443 --cidr 0.0.0.0/0 2>/dev/null || true
+$AWS_CMD ec2 authorize-security-group-ingress --region $REGION --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 2>/dev/null || true
+$AWS_CMD ec2 authorize-security-group-ingress --region $REGION --group-id $SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0 2>/dev/null || true
+$AWS_CMD ec2 authorize-security-group-ingress --region $REGION --group-id $SG_ID --protocol tcp --port 443 --cidr 0.0.0.0/0 2>/dev/null || true
 echo "✅ Security Group: $SG_ID"
 echo ""
 
 # Step 6: Get AMI
 echo "🖼️  Step 6/8: Finding latest AMI..."
-AMI_ID=$(aws ec2 describe-images \
+AMI_ID=$($AWS_CMD ec2 describe-images \
     --region $REGION \
     --owners amazon \
     --filters "Name=name,Values=al2023-ami-*-x86_64" "Name=state,Values=available" \
     --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text)
 
 if [ "$AMI_ID" = "None" ] || [ -z "$AMI_ID" ]; then
-    AMI_ID=$(aws ec2 describe-images \
+    AMI_ID=$($AWS_CMD ec2 describe-images \
         --region $REGION \
         --owners amazon \
         --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" "Name=state,Values=available" \
         --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' --output text)
+fi
+
+if [ "$AMI_ID" = "None" ] || [ -z "$AMI_ID" ]; then
+    echo "❌ No suitable AMI found in region $REGION"
+    exit 1
 fi
 echo "✅ AMI: $AMI_ID"
 echo ""
@@ -129,6 +179,13 @@ USER_DATA=$(cat <<'USERDATA_EOF'
 #!/bin/bash
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
+# Error handling function
+error_exit() {
+    echo "❌ Error: $1" >&2
+    exit 1
+}
+
+# Set error handling for critical sections
 set -e
 
 echo "🚀 Starting automated Business App deployment..."
@@ -166,11 +223,19 @@ cd /opt/business-app
 
 # Clone repository
 echo "📥 Cloning repository..."
-sudo -u ec2-user git clone https://github.com/ashishnimrot/business.git . || {
-    echo "⚠️  Repository clone failed, will retry..."
-    sleep 10
-    sudo -u ec2-user git clone https://github.com/ashishnimrot/business.git .
-}
+for attempt in {1..3}; do
+    if sudo -u ec2-user git clone https://github.com/ashishnimrot/business.git . 2>/dev/null; then
+        echo "✅ Repository cloned successfully"
+        break
+    fi
+    if [ $attempt -lt 3 ]; then
+        echo "⚠️  Clone attempt $attempt failed, retrying in 10 seconds..."
+        sleep 10
+    else
+        echo "❌ Failed to clone repository after 3 attempts"
+        exit 1
+    fi
+done
 
 # Generate secure passwords
 DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
@@ -382,7 +447,7 @@ fi
 
 # Step 8: Launch EC2 Instance
 echo "🚀 Step 8/8: Launching EC2 instance..."
-INSTANCE_ID=$(aws ec2 run-instances \
+INSTANCE_ID=$($AWS_CMD ec2 run-instances \
     --region $REGION \
     --image-id $AMI_ID \
     --instance-type $INSTANCE_TYPE \
@@ -394,18 +459,44 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":30,"VolumeType":"gp3"}}]' \
     --query 'Instances[0].InstanceId' --output text)
 
+if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+    echo "❌ Failed to launch EC2 instance"
+    exit 1
+fi
+
 echo "✅ Instance launched: $INSTANCE_ID"
 echo ""
 
 # Wait for instance
 echo "⏳ Waiting for instance to be running..."
-aws ec2 wait instance-running --region $REGION --instance-ids $INSTANCE_ID
+$AWS_CMD ec2 wait instance-running --region $REGION --instance-ids $INSTANCE_ID
 
 # Get public IP
-PUBLIC_IP=$(aws ec2 describe-instances \
+PUBLIC_IP=$($AWS_CMD ec2 describe-instances \
     --region $REGION \
     --instance-ids $INSTANCE_ID \
     --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+
+# Wait for public IP if not immediately available
+if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
+    echo "⏳ Waiting for public IP assignment..."
+    for i in {1..30}; do
+        sleep 5
+        PUBLIC_IP=$($AWS_CMD ec2 describe-instances \
+            --region $REGION \
+            --instance-ids $INSTANCE_ID \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+        if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "None" ]; then
+            break
+        fi
+    done
+fi
+
+if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
+    echo "⚠️  Public IP not yet assigned. Instance may be in a private subnet."
+    echo "   Instance ID: $INSTANCE_ID"
+    echo "   Check AWS Console for IP address"
+fi
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -424,50 +515,72 @@ echo ""
 
 # Monitor deployment
 echo "📊 Monitoring deployment progress..."
-for i in {1..60}; do
-    sleep 10
-    if ssh -i ~/.ssh/$KEY_NAME.pem -o StrictHostKeyChecking=no -o ConnectTimeout=5 ec2-user@$PUBLIC_IP "docker ps | grep -q business-web-app" 2>/dev/null; then
-        echo ""
-        echo "✅ Services are running!"
-        break
-    fi
-    if [ $((i % 6)) -eq 0 ]; then
-        echo "   Still deploying... ($((i*10)) seconds elapsed)"
-    fi
-done
+SSH_KEY_FILE="$HOME/.ssh/$KEY_NAME.pem"
+if [ ! -f "$SSH_KEY_FILE" ]; then
+    echo "⚠️  SSH key file not found: $SSH_KEY_FILE"
+    echo "   Skipping SSH-based monitoring. Please check instance manually."
+    echo "   Instance IP: $PUBLIC_IP"
+elif [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" = "None" ]; then
+    echo "⚠️  Public IP not available yet. Skipping SSH monitoring."
+    echo "   Check AWS Console for instance status."
+else
+    for i in {1..60}; do
+        sleep 10
+        if ssh -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null ec2-user@$PUBLIC_IP "docker ps | grep -q business-web-app" 2>/dev/null; then
+            echo ""
+            echo "✅ Services are running!"
+            break
+        fi
+        if [ $((i % 6)) -eq 0 ]; then
+            echo "   Still deploying... ($((i*10)) seconds elapsed)"
+        fi
+    done
+fi
 
 # Final check
 echo ""
 echo "🔍 Verifying deployment..."
 sleep 10
 
-if curl -s -f -m 5 "http://$PUBLIC_IP" > /dev/null 2>&1; then
+if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "None" ] && curl -s -f -m 5 "http://$PUBLIC_IP" > /dev/null 2>&1; then
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
     echo "🎉 DEPLOYMENT SUCCESSFUL!"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
-    echo "🌐 Your application is live at:"
-    echo "   http://$PUBLIC_IP"
-    echo ""
-    echo "📋 Access Information:"
-    echo "   - Web App: http://$PUBLIC_IP"
-    echo "   - API: http://$PUBLIC_IP/api/v1/*"
-    echo "   - SSH: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
+    if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "None" ]; then
+        echo "🌐 Your application is live at:"
+        echo "   http://$PUBLIC_IP"
+        echo ""
+        echo "📋 Access Information:"
+        echo "   - Web App: http://$PUBLIC_IP"
+        echo "   - API: http://$PUBLIC_IP/api/v1/*"
+        echo "   - SSH: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
+    else
+        echo "🌐 Instance is running but public IP not yet assigned."
+        echo "   Check AWS Console for the IP address."
+        echo "   Instance ID: $INSTANCE_ID"
+    fi
     echo ""
     echo "🔐 Security Notes:"
     echo "   - Backend services are internal only (not exposed)"
     echo "   - Only web app is accessible publicly"
     echo "   - All API calls go through Nginx reverse proxy"
     echo ""
-    echo "📊 Check deployment status:"
-    echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'docker ps'"
-    echo ""
-    echo "🔍 Verify deployment (recommended):"
-    echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP '/home/ec2-user/verify-deployment.sh'"
-    echo ""
-    echo "📋 View logs:"
-    echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'cd /opt/business-app/app && docker-compose -f docker-compose.prod.yml logs --tail=50'"
+    if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "None" ]; then
+        echo "📊 Check deployment status:"
+        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'docker ps'"
+        echo ""
+        echo "🔍 Verify deployment (recommended):"
+        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP '/home/ec2-user/verify-deployment.sh'"
+        echo ""
+        echo "📋 View logs:"
+        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'cd /opt/business-app/app && docker-compose -f docker-compose.prod.yml logs --tail=50'"
+    else
+        echo "📊 Check deployment status in AWS Console:"
+        echo "   Instance ID: $INSTANCE_ID"
+        echo "   Once public IP is assigned, use SSH commands above"
+    fi
     echo ""
     echo "💡 Database tables are auto-created on service startup"
     echo "   All services use ENABLE_SYNC=true for automatic table creation"
@@ -476,12 +589,18 @@ if curl -s -f -m 5 "http://$PUBLIC_IP" > /dev/null 2>&1; then
 else
     echo ""
     echo "⚠️  Deployment may still be in progress..."
-    echo "   Check status: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'docker ps'"
-    echo "   View logs: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'cd /opt/business-app/app && docker-compose -f docker-compose.prod.yml logs'"
-    echo "   Verify: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP '/home/ec2-user/verify-deployment.sh'"
-    echo ""
-    echo "🌐 Application URL: http://$PUBLIC_IP"
-    echo "   (May take a few more minutes to be fully ready)"
+    if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "None" ]; then
+        echo "   Check status: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'docker ps'"
+        echo "   View logs: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP 'cd /opt/business-app/app && docker-compose -f docker-compose.prod.yml logs'"
+        echo "   Verify: ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP '/home/ec2-user/verify-deployment.sh'"
+        echo ""
+        echo "🌐 Application URL: http://$PUBLIC_IP"
+        echo "   (May take a few more minutes to be fully ready)"
+    else
+        echo "   Instance ID: $INSTANCE_ID"
+        echo "   Public IP not yet assigned. Check AWS Console for IP address."
+        echo "   Once IP is available, use SSH commands to check deployment status."
+    fi
     echo ""
     echo "💡 Note: Database tables are auto-created on first service start"
     echo "   Services will create tables automatically with ENABLE_SYNC=true"
