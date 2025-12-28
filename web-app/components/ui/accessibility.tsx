@@ -34,7 +34,7 @@ export function VisuallyHidden({
   ...props
 }: {
   children: React.ReactNode;
-  as?: keyof JSX.IntrinsicElements;
+  as?: React.ElementType;
   className?: string;
 } & React.HTMLAttributes<HTMLElement>) {
   return (
