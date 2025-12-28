@@ -124,23 +124,28 @@ echo ""
 
 # Step 5: Create Security Group
 echo "🔒 Step 5/8: Creating Security Group..."
-SG_ID=$($AWS_CMD ec2 create-security-group \
-    --region $REGION \
-    --group-name business-app-beta-sg \
-    --description "Business App Beta - Web App Public" \
-    --vpc-id $VPC_ID \
-    --query 'GroupId' --output text 2>/dev/null)
+
+# First check if security group already exists
+SG_ID=$($AWS_CMD ec2 describe-security-groups --region $REGION \
+    --filters "Name=group-name,Values=business-app-beta-sg" "Name=vpc-id,Values=$VPC_ID" \
+    --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null)
 
 if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
-    echo "Security group may already exist, trying to find it..."
-    SG_ID=$($AWS_CMD ec2 describe-security-groups --region $REGION \
-        --filters "Name=group-name,Values=business-app-beta-sg" "Name=vpc-id,Values=$VPC_ID" \
-        --query 'SecurityGroups[0].GroupId' --output text)
-fi
-
-if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
-    echo "❌ Failed to create or find security group"
-    exit 1
+    echo "Creating new security group..."
+    SG_ID=$($AWS_CMD ec2 create-security-group \
+        --region $REGION \
+        --group-name business-app-beta-sg \
+        --description "Business App Beta - Web App Public" \
+        --vpc-id $VPC_ID \
+        --query 'GroupId' --output text 2>/dev/null)
+    
+    if [ -z "$SG_ID" ] || [ "$SG_ID" = "None" ]; then
+        echo "❌ Failed to create security group"
+        exit 1
+    fi
+    echo "✅ Security group created: $SG_ID"
+else
+    echo "✅ Security group already exists: $SG_ID"
 fi
 
 # Configure security group rules
@@ -195,7 +200,9 @@ sudo yum update -y -q
 
 # Install Docker
 echo "📦 Installing Docker..."
-sudo yum install -y docker git curl
+# Fix curl package conflict by using --allowerasing or installing separately
+sudo yum install -y docker git --allowerasing || sudo yum install -y docker git
+sudo yum install -y curl --allowerasing || sudo yum install -y curl
 sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -a -G docker ec2-user
@@ -252,30 +259,106 @@ JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 ENABLE_SYNC=true
 ENV_EOF
 
+# Also create .env file (docker-compose reads .env by default)
+sudo -u ec2-user cp .env.production .env
+sudo chown ec2-user:ec2-user .env .env.production
+
 # Build and deploy
 echo "🔨 Building and deploying services..."
 cd /opt/business-app/app
 
-# Wait for Docker to be ready
+# Wait for Docker to be ready and ensure ec2-user can use it
 echo "⏳ Waiting for Docker to be ready..."
 for i in {1..30}; do
     if sudo docker ps &>/dev/null; then
-        break
+        # Ensure ec2-user can access docker
+        sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+        # Test if ec2-user can use docker
+        if sudo -u ec2-user docker ps &>/dev/null 2>&1; then
+            break
+        fi
     fi
     sleep 2
 done
 
-# Build services
-echo "🔨 Building Docker images (this may take 10-15 minutes)..."
-sudo -u ec2-user docker-compose -f docker-compose.prod.yml build --no-cache || {
-    echo "⚠️  Build failed, retrying..."
-    sleep 10
-    sudo -u ec2-user docker-compose -f docker-compose.prod.yml build --no-cache
+# Final check and fix permissions
+if ! sudo -u ec2-user docker ps &>/dev/null 2>&1; then
+    echo "⚠️  Fixing Docker permissions for ec2-user..."
+    sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+    sudo newgrp docker <<EOF
+exit
+EOF
+fi
+
+# Install Docker Buildx if needed (for both root and ec2-user)
+echo "🔧 Installing Docker Buildx..."
+BUILDX_VERSION="v0.17.0"
+mkdir -p ~/.docker/cli-plugins
+sudo mkdir -p /root/.docker/cli-plugins
+sudo mkdir -p /home/ec2-user/.docker/cli-plugins
+
+# Download buildx
+curl -L "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64" -o /tmp/docker-buildx 2>/dev/null || {
+    echo "⚠️  Buildx download failed, trying alternative method..."
+    curl -L "https://github.com/docker/buildx/releases/latest/download/buildx-linux-amd64" -o /tmp/docker-buildx 2>/dev/null || true
 }
 
-# Start services
+if [ -f /tmp/docker-buildx ]; then
+    chmod +x /tmp/docker-buildx
+    sudo cp /tmp/docker-buildx /root/.docker/cli-plugins/docker-buildx
+    sudo cp /tmp/docker-buildx /home/ec2-user/.docker/cli-plugins/docker-buildx
+    sudo chmod +x /root/.docker/cli-plugins/docker-buildx
+    sudo chmod +x /home/ec2-user/.docker/cli-plugins/docker-buildx
+    sudo chown ec2-user:ec2-user /home/ec2-user/.docker/cli-plugins/docker-buildx
+    echo "✅ Docker Buildx installed"
+else
+    echo "⚠️  Could not install Buildx, continuing without it..."
+fi
+
+# Build services with environment variables
+echo "🔨 Building Docker images (this may take 10-15 minutes)..."
+cd /opt/business-app/app
+
+# Ensure .env file exists (docker-compose reads .env by default)
+if [ ! -f .env ]; then
+    sudo -u ec2-user cp .env.production .env
+    sudo chown ec2-user:ec2-user .env
+fi
+
+# Build with environment variables loaded using heredoc to avoid escaping issues
+sudo -u ec2-user bash <<'BUILD_EOF'
+cd /opt/business-app/app
+# Load environment variables
+set -a
+source .env.production
+set +a
+# Build images
+docker-compose -f docker-compose.prod.yml build --no-cache
+BUILD_EOF
+
+# If build failed, retry without --no-cache
+BUILD_EXIT_CODE=$?
+if [ $BUILD_EXIT_CODE -ne 0 ]; then
+    echo "⚠️  Build failed, retrying without --no-cache..."
+    sleep 10
+    sudo -u ec2-user bash <<'BUILD_EOF'
+cd /opt/business-app/app
+set -a
+source .env.production
+set +a
+docker-compose -f docker-compose.prod.yml build
+BUILD_EOF
+fi
+
+# Start services with environment variables
 echo "🚀 Starting services..."
-sudo -u ec2-user docker-compose -f docker-compose.prod.yml up -d
+sudo -u ec2-user bash <<'START_EOF'
+cd /opt/business-app/app
+set -a
+source .env.production
+set +a
+docker-compose -f docker-compose.prod.yml up -d
+START_EOF
 
 # Wait for services to be ready
 echo "⏳ Waiting for services to start (this may take 2-3 minutes)..."
