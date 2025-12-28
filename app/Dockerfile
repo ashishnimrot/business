@@ -39,9 +39,15 @@ RUN apk add --no-cache curl
 
 # Copy package files and install production dependencies with retry logic
 COPY package*.json ./
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-timeout 300000
 RUN for i in 1 2 3 4 5; do \
+    echo "npm install attempt $i..." && \
     npm ci --only=production --legacy-peer-deps && break || \
-    (echo "Attempt $i failed, retrying in 10 seconds..." && sleep 10); \
+    (echo "Attempt $i failed, waiting 30 seconds before retry..." && sleep 30); \
     done
 
 # Copy built application
