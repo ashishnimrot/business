@@ -326,8 +326,12 @@ fi
 # Build with environment variables loaded using heredoc to avoid escaping issues
 sudo -u ec2-user bash <<'BUILD_EOF'
 cd /opt/business-app/app
-# Load environment variables safely (export them)
-export $(grep -v '^#' .env.production | xargs)
+# Load environment variables safely (line by line to handle special characters)
+while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    value=\$(echo "\$value" | sed 's/^["'\'']//; s/["'\'']$//')
+    export "\$key=\$value"
+done < .env.production
 # Build images
 docker-compose -f docker-compose.prod.yml build --no-cache
 BUILD_EOF
@@ -339,8 +343,12 @@ if [ $BUILD_EXIT_CODE -ne 0 ]; then
     sleep 10
     sudo -u ec2-user bash <<'BUILD_EOF'
 cd /opt/business-app/app
-# Load environment variables safely
-export $(grep -v '^#' .env.production | xargs)
+# Load environment variables safely (line by line to handle special characters)
+while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    value=\$(echo "\$value" | sed 's/^["'\'']//; s/["'\'']$//')
+    export "\$key=\$value"
+done < .env.production
 docker-compose -f docker-compose.prod.yml build
 BUILD_EOF
 fi
@@ -349,8 +357,12 @@ fi
 echo "🚀 Starting services..."
 sudo -u ec2-user bash <<'START_EOF'
 cd /opt/business-app/app
-# Load environment variables safely
-export $(grep -v '^#' .env.production | xargs)
+# Load environment variables safely (line by line to handle special characters)
+while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    value=\$(echo "\$value" | sed 's/^["'\'']//; s/["'\'']$//')
+    export "\$key=\$value"
+done < .env.production
 docker-compose -f docker-compose.prod.yml up -d
 START_EOF
 

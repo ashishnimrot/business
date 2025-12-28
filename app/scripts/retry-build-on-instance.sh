@@ -20,8 +20,10 @@ if [ ! -f .env.production ]; then
     cp .env.production .env
 fi
 
-# Load environment variables
-export $(grep -v '^#' .env.production | xargs)
+# Load environment variables safely
+set -a
+source <(grep -v '^#' .env.production | sed 's/^/export /')
+set +a
 
 # Stop any running containers
 echo "🛑 Stopping existing containers..."
