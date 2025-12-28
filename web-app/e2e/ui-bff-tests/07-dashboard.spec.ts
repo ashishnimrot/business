@@ -230,7 +230,7 @@ test.describe('07. Dashboard Tests', () => {
         console.log(`📊 Dashboard Sales Value: ${salesValue}`);
         
         // Extract number from string (handle ₹ symbol and commas)
-        const displayedSales = parseFloat(salesValue.replace(/[₹,\s]/g, '')) || 0;
+        const displayedSales = salesValue ? parseFloat(salesValue.replace(/[₹,\s]/g, '')) || 0 : 0;
         console.log(`   Displayed: ₹${displayedSales.toFixed(2)}`);
         
         // Allow for minor rounding differences
@@ -292,7 +292,7 @@ test.describe('07. Dashboard Tests', () => {
         const receivablesValue = await page.locator('[data-testid="receivables"], [data-testid="outstanding"]').first().textContent().catch(() => '');
         console.log(`📊 Dashboard Receivables Value: ${receivablesValue}`);
         
-        const displayedReceivables = parseFloat(receivablesValue.replace(/[₹,\s]/g, '')) || 0;
+        const displayedReceivables = receivablesValue ? parseFloat(receivablesValue.replace(/[₹,\s]/g, '')) || 0 : 0;
         console.log(`   Displayed: ₹${displayedReceivables.toFixed(2)}`);
         
         if (expectedReceivables > 0) {
@@ -345,7 +345,7 @@ test.describe('07. Dashboard Tests', () => {
         const purchasesValue = await page.locator('[data-testid="total-purchases"]').first().textContent().catch(() => '');
         console.log(`📊 Dashboard Purchases Value: ${purchasesValue}`);
         
-        const displayedPurchases = parseFloat(purchasesValue.replace(/[₹,\s]/g, '')) || 0;
+        const displayedPurchases = purchasesValue ? parseFloat(purchasesValue.replace(/[₹,\s]/g, '')) || 0 : 0;
         console.log(`   Displayed: ₹${displayedPurchases.toFixed(2)}`);
         
         if (expectedPurchases > 0) {
@@ -401,7 +401,7 @@ test.describe('07. Dashboard Tests', () => {
         console.log(`📊 Dashboard shows pending invoices info: ${pendingText}`);
         
         // Extract number if present
-        const match = pendingText.match(/(\d+)/);
+        const match = pendingText ? pendingText.match(/(\d+)/) : null;
         if (match) {
           const displayedCount = parseInt(match[1]);
           console.log(`   Displayed count: ${displayedCount}`);
@@ -456,7 +456,7 @@ test.describe('07. Dashboard Tests', () => {
         const lowStockText = await lowStockElement.textContent().catch(() => '');
         console.log(`📊 Dashboard shows low stock info: ${lowStockText}`);
         
-        const match = lowStockText.match(/(\d+)/);
+        const match = lowStockText ? lowStockText.match(/(\d+)/) : null;
         if (match) {
           const displayedCount = parseInt(match[1]);
           console.log(`   Displayed count: ${displayedCount}`);
@@ -504,7 +504,7 @@ test.describe('07. Dashboard Tests', () => {
         const partiesText = await partiesElement.textContent().catch(() => '');
         console.log(`📊 Dashboard shows parties info: ${partiesText}`);
         
-        const match = partiesText.match(/(\d+)/);
+        const match = partiesText ? partiesText.match(/(\d+)/) : null;
         if (match) {
           const displayedCount = parseInt(match[1]);
           console.log(`   Displayed count: ${displayedCount}`);

@@ -205,7 +205,7 @@ test.describe('08. Cross-Module Tests', () => {
         // Check if invoice and party are pre-filled
         const dialog = page.locator('[role="dialog"]').first();
         const dialogContent = await dialog.textContent().catch(() => '');
-        console.log(`📊 Payment dialog context available: ${dialogContent.length > 0}`);
+        console.log(`📊 Payment dialog context available: ${dialogContent ? dialogContent.length > 0 : false}`);
       }
       
       tracker.printSummary();
@@ -555,7 +555,7 @@ test.describe('08. Cross-Module Tests', () => {
                 const newStatus = await statusBadge.textContent().catch(() => '');
                 console.log(`   New invoice status: ${newStatus}`);
                 
-                if (newStatus.toLowerCase().includes('paid')) {
+                if (newStatus && newStatus.toLowerCase().includes('paid')) {
                   console.log(`   ✅ Invoice status updated to paid`);
                 }
               }

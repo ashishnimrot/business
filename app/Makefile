@@ -273,6 +273,21 @@ db-migrate: ## Run database migrations
 	@echo "$(GREEN)✅ Migrations complete$(NC)"
 
 # =============================================================================
+# VERIFICATION
+# =============================================================================
+verify-types: ## Verify TypeScript types for all services
+	@echo "$(BLUE)🔍 Verifying TypeScript types...$(NC)"
+	@bash scripts/verify-types.sh
+
+verify-all: ## Run all verification checks (lint, types, format)
+	@echo "$(BLUE)🔍 Running comprehensive verification...$(NC)"
+	@bash scripts/verify-all.sh
+
+verify-web-app: ## Verify web-app (types and lint)
+	@echo "$(BLUE)🔍 Verifying web-app...$(NC)"
+	@cd ../web-app && bash scripts/verify-all.sh
+
+# =============================================================================
 # QUICK COMMANDS
 # =============================================================================
 up: start ## Alias for start

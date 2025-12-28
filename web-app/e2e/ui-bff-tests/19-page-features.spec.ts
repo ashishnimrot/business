@@ -264,7 +264,7 @@ test.describe('19. Page Features Tests', () => {
       const statsCard = page.locator('[data-testid*="stat"], .stat-card, .card').first();
       const initialStats = await statsCard.textContent().catch(() => '');
       
-      console.log(`📊 Initial stats loaded: ${initialStats.length > 0}`);
+      console.log(`📊 Initial stats loaded: ${initialStats ? initialStats.length > 0 : false}`);
       
       // Note: Full real-time test would require creating data and refreshing
     });

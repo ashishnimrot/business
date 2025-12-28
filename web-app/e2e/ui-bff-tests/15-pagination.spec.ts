@@ -54,7 +54,7 @@ test.describe('15. Pagination Tests', () => {
       console.log(`📊 Page size selector: ${hasPageSize}`);
       
       // Check API for pagination params
-      const partyApi = tracker.getByUrlPattern('parties');
+      const partyApi = tracker.getLastCall('parties');
       if (partyApi) {
         const hasPaginationParam = partyApi.url.includes('page=') || partyApi.url.includes('limit=');
         console.log(`📊 API uses pagination params: ${hasPaginationParam}`);

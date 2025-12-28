@@ -587,6 +587,6 @@ export const errorHandler = new ErrorHandlerService();
 
 // Export for browser console access
 if (typeof window !== 'undefined') {
-  (window as Window & { __errorHandler?: ErrorHandlerService }).errorHandler = errorHandler;
-  (window as Window & { __getErrorMetrics?: typeof getErrorMetrics }).getErrorMetrics = getErrorMetrics;
+  (window as Window & { __errorHandler?: ErrorHandlerService }).__errorHandler = errorHandler;
+  (window as Window & { __getErrorMetrics?: typeof getErrorMetrics }).__getErrorMetrics = getErrorMetrics;
 }
