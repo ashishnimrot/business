@@ -255,7 +255,7 @@ services:
     container_name: business-web-app
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_AUTH_API_URL=/api/v1/auth
+      - NEXT_PUBLIC_AUTH_API_URL=/api/v1
       - NEXT_PUBLIC_BUSINESS_API_URL=/api/v1
       - NEXT_PUBLIC_PARTY_API_URL=/api/v1
       - NEXT_PUBLIC_INVENTORY_API_URL=/api/v1

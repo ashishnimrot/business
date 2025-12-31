@@ -18,9 +18,9 @@ const API_CONFIG = {
 };
 
 // API Base URLs - Use relative URLs for production (via Nginx proxy)
-// Frontend calls like: partyApi.get('/parties') 
-// So baseURL should be '/api/v1' and endpoint is '/parties'
-// Final URL: '/api/v1/parties' which matches @Controller('api/v1/parties')
+// All services use '/api/v1' as base, pages add the service-specific path
+// Auth: pages call authApi.post('/auth/send-otp') → '/api/v1/auth/send-otp'
+// Others: pages call partyApi.get('/parties') → '/api/v1/parties'
 export const API_URLS = {
   auth: process.env.NEXT_PUBLIC_AUTH_API_URL || '/api/v1',
   business: process.env.NEXT_PUBLIC_BUSINESS_API_URL || '/api/v1',
@@ -200,7 +200,7 @@ const createApiClient = (baseURL: string, serviceName: string): AxiosInstance =>
           const refreshToken = tokenStorage.getRefreshToken();
           if (refreshToken) {
             const response = await axios.post(
-              `${API_URLS.auth}/refresh-token`,
+              `${API_URLS.auth}/auth/refresh-token`,
               { refresh_token: refreshToken },
               { timeout: 10000 }
             );

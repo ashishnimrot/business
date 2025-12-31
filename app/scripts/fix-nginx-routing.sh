@@ -1,17 +1,17 @@
 #!/bin/bash
-# Quick fix script to configure and start Nginx
+# Fix Nginx routing for API endpoints
+# This ensures proper path forwarding to backend services
 
 set -e
 
-echo "🔧 Fixing Nginx Configuration"
-echo "=============================="
+echo "🔧 Fixing Nginx API Routing"
+echo "============================"
 echo ""
 
-# Check if config file exists
-if [ ! -f "/etc/nginx/conf.d/business-app.conf" ]; then
-    echo "📝 Creating Nginx configuration..."
-    
-    sudo tee /etc/nginx/conf.d/business-app.conf <<'NGINX_EOF'
+# The issue: Nginx needs to preserve the full path for backend services
+# Backend controllers expect: /api/v1/auth/send-otp, /api/v1/parties, etc.
+
+sudo tee /etc/nginx/conf.d/business-app.conf <<'NGINX_EOF'
 upstream auth_service { server localhost:3002; }
 upstream business_service { server localhost:3003; }
 upstream party_service { server localhost:3004; }
@@ -72,15 +72,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
     
-    # Stock endpoints (inventory service)
-    location /api/v1/stock {
-        proxy_pass http://inventory_service;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    
     # Invoice service - preserve full path /api/v1/invoices/*
     location /api/v1/invoices {
         proxy_pass http://invoice_service;
@@ -98,66 +89,78 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+    
+    # Stock endpoints (inventory service)
+    location /api/v1/stock {
+        proxy_pass http://inventory_service;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 NGINX_EOF
-    
-    echo "✅ Configuration file created"
-else
-    echo "✅ Configuration file exists"
-fi
 
+echo "✅ Nginx configuration updated"
 echo ""
+
+# Test configuration
 echo "🧪 Testing Nginx configuration..."
 if sudo nginx -t; then
     echo "✅ Configuration is valid"
 else
     echo "❌ Configuration test failed"
+    sudo nginx -t
     exit 1
 fi
 
+# Restart Nginx
 echo ""
-echo "🚀 Starting Nginx..."
-sudo systemctl start nginx
-sudo systemctl enable nginx
+echo "🔄 Restarting Nginx..."
+sudo systemctl restart nginx
 
-echo ""
-echo "📊 Checking Nginx status..."
+# Wait a moment
+sleep 2
+
+# Check status
 if sudo systemctl is-active --quiet nginx; then
     echo "✅ Nginx is running"
 else
     echo "❌ Nginx failed to start"
-    echo "Check logs: sudo journalctl -u nginx -n 50"
+    sudo journalctl -u nginx -n 20
     exit 1
 fi
 
 echo ""
-echo "🔍 Testing web-app connectivity..."
-if curl -s -f -m 5 http://localhost:3000 > /dev/null; then
-    echo "✅ Web-app is accessible on port 3000"
+echo "🔍 Testing backend connectivity..."
+echo ""
+
+# Test auth service directly
+if curl -s -f -m 5 http://localhost:3002/health > /dev/null 2>&1; then
+    echo "✅ Auth service (port 3002): Accessible"
 else
-    echo "⚠️  Web-app not responding on port 3000"
-    echo "   Check: docker ps | grep web-app"
+    echo "❌ Auth service (port 3002): Not accessible"
+    echo "   Check: docker ps | grep auth"
 fi
 
-echo ""
-echo "🔍 Testing Nginx proxy..."
-if curl -s -f -m 5 http://localhost > /dev/null; then
-    echo "✅ Nginx proxy is working"
+# Test via Nginx
+if curl -s -f -m 5 http://localhost/api/v1/auth/send-otp -X POST -H "Content-Type: application/json" -d '{}' > /dev/null 2>&1; then
+    echo "✅ Auth API via Nginx: Accessible"
 else
-    echo "⚠️  Nginx proxy not responding"
-    echo "   Check: sudo nginx -t"
-    echo "   Check: sudo systemctl status nginx"
+    echo "⚠️  Auth API via Nginx: May need service check (expected 400/401, not 502)"
 fi
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "✅ Nginx setup complete!"
+echo "✅ Nginx routing fixed!"
 echo ""
-echo "🌐 Your application should now be accessible at:"
-echo "   http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo 'YOUR_EC2_IP')"
+echo "📋 Key changes:"
+echo "   - Removed trailing slashes from location blocks"
+echo "   - Changed proxy_pass to preserve full paths"
+echo "   - Updated location paths to match actual endpoints"
 echo ""
-echo "📋 To check status:"
-echo "   sudo systemctl status nginx"
-echo "   curl -I http://localhost"
+echo "🔍 To verify:"
+echo "   curl -I http://localhost/api/v1/auth/send-otp"
+echo "   sudo tail -f /var/log/nginx/error.log"
 echo ""
 

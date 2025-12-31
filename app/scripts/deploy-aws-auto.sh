@@ -451,7 +451,8 @@ server {
         proxy_cache_bypass \$http_upgrade;
     }
     
-    location /api/v1/auth/ {
+    # Auth service - preserve full path /api/v1/auth/*
+    location /api/v1/auth {
         proxy_pass http://auth_service;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -459,7 +460,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
-    location /api/v1/business/ {
+    # Business service - preserve full path /api/v1/businesses/*
+    location /api/v1/businesses {
         proxy_pass http://business_service;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -467,7 +469,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
-    location /api/v1/party/ {
+    # Party service - preserve full path /api/v1/parties/*
+    location /api/v1/parties {
         proxy_pass http://party_service;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -475,7 +478,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
-    location /api/v1/inventory/ {
+    # Inventory service - preserve full path /api/v1/items/*
+    location /api/v1/items {
         proxy_pass http://inventory_service;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -483,7 +487,17 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
-    location /api/v1/invoice/ {
+    # Stock endpoints (inventory service)
+    location /api/v1/stock {
+        proxy_pass http://inventory_service;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    # Invoice service - preserve full path /api/v1/invoices/*
+    location /api/v1/invoices {
         proxy_pass http://invoice_service;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -491,7 +505,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
     
-    location /api/v1/payment/ {
+    # Payment service - preserve full path /api/v1/payments/*
+    location /api/v1/payments {
         proxy_pass http://payment_service;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
