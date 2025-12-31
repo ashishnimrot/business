@@ -20,31 +20,29 @@ chmod -R 755 /var/www/html
 echo "✅ Directory created"
 echo ""
 
-# Update Nginx config to add validation path BEFORE location /
-echo "2. Updating Nginx configuration..."
-if [ -f /etc/nginx/conf.d/business-app.conf ]; then
-    # Check if validation path already exists
-    if grep -q "\.well-known/acme-challenge" /etc/nginx/conf.d/business-app.conf; then
-        echo "✅ Validation path already configured"
-    else
-        # Backup
-        cp /etc/nginx/conf.d/business-app.conf /etc/nginx/conf.d/business-app.conf.backup.$(date +%Y%m%d_%H%M%S)
-        
-        # Add validation path BEFORE location / block
-        sed -i '/server_name/a\
-    # CRITICAL: Allow Let\'s Encrypt validation\
-    location /.well-known/acme-challenge/ {\
-        root /var/www/html;\
-        try_files $uri =404;\
-    }' /etc/nginx/conf.d/business-app.conf
-        
-        # If that didn't work, try a different approach
-        if ! grep -q "\.well-known/acme-challenge" /etc/nginx/conf.d/business-app.conf; then
-            # Manual insertion method
-            python3 << 'PYTHON_EOF'
+# Check if Nginx config exists
+if [ ! -f /etc/nginx/conf.d/business-app.conf ]; then
+    echo "❌ Nginx config file not found: /etc/nginx/conf.d/business-app.conf"
+    echo "   Run domain setup first: sudo bash scripts/setup-domain-ec2.sh"
+    exit 1
+fi
+
+# Check if validation path already exists
+if grep -q "\.well-known/acme-challenge" /etc/nginx/conf.d/business-app.conf; then
+    echo "✅ Validation path already configured in Nginx"
+else
+    echo "2. Updating Nginx configuration..."
+    
+    # Backup
+    cp /etc/nginx/conf.d/business-app.conf /etc/nginx/conf.d/business-app.conf.backup.$(date +%Y%m%d_%H%M%S)
+    echo "✅ Backup created"
+    
+    # Use Python to properly insert the validation block
+    python3 << 'PYTHON_EOF'
 import re
 
 config_file = '/etc/nginx/conf.d/business-app.conf'
+
 with open(config_file, 'r') as f:
     content = f.read()
 
@@ -52,22 +50,44 @@ with open(config_file, 'r') as f:
 if '.well-known/acme-challenge' in content:
     print("Already configured")
 else:
-    # Find server block and add validation path after server_name
-    pattern = r'(server_name[^;]+;)'
-    replacement = r'\1\n    \n    # CRITICAL: Allow Let\'s Encrypt validation\n    location /.well-known/acme-challenge/ {\n        root /var/www/html;\n        try_files $uri =404;\n    }'
+    # Find the server block and add validation path after server_name line
+    # Pattern: server_name line followed by optional whitespace and then location or other directives
+    pattern = r'(server_name[^;]+;)\s*\n'
+    
+    # Replacement: add validation block after server_name
+    replacement = r'\1\n    \n    # CRITICAL: Allow Let\'s Encrypt validation\n    location /.well-known/acme-challenge/ {\n        root /var/www/html;\n        try_files $uri =404;\n    }\n    \n'
+    
     content = re.sub(pattern, replacement, content, count=1)
+    
+    # If that didn't work, try a simpler approach - find server_name and add after it
+    if '.well-known/acme-challenge' not in content:
+        # Find line with server_name
+        lines = content.split('\n')
+        new_lines = []
+        added = False
+        
+        for i, line in enumerate(lines):
+            new_lines.append(line)
+            # If we find server_name line and haven't added validation yet
+            if 'server_name' in line and not added and '#' not in line:
+                # Add validation block after this line
+                new_lines.append('')
+                new_lines.append('    # CRITICAL: Allow Let\'s Encrypt validation')
+                new_lines.append('    location /.well-known/acme-challenge/ {')
+                new_lines.append('        root /var/www/html;')
+                new_lines.append('        try_files $uri =404;')
+                new_lines.append('    }')
+                new_lines.append('')
+                added = True
+        
+        content = '\n'.join(new_lines)
     
     with open(config_file, 'w') as f:
         f.write(content)
-    print("Configuration updated")
+    print("✅ Nginx configuration updated")
 PYTHON_EOF
-        fi
-        echo "✅ Nginx configuration updated"
-    fi
-else
-    echo "❌ Nginx config file not found: /etc/nginx/conf.d/business-app.conf"
-    echo "   Run domain setup first: sudo bash scripts/setup-domain-ec2.sh"
-    exit 1
+    
+    echo "✅ Configuration updated"
 fi
 echo ""
 
@@ -75,7 +95,14 @@ echo ""
 echo "3. Testing and restarting Nginx..."
 if nginx -t; then
     systemctl restart nginx
-    echo "✅ Nginx restarted"
+    sleep 2
+    if systemctl is-active --quiet nginx; then
+        echo "✅ Nginx restarted successfully"
+    else
+        echo "❌ Nginx failed to start"
+        systemctl status nginx
+        exit 1
+    fi
 else
     echo "❌ Nginx config test failed"
     nginx -t
@@ -88,16 +115,28 @@ echo "4. Testing validation path..."
 TEST_FILE="/var/www/html/.well-known/acme-challenge/test-$(date +%s)"
 echo "test-content" > $TEST_FILE
 chmod 644 $TEST_FILE
+TEST_NAME=$(basename $TEST_FILE)
 
 DOMAIN="samriddhi.buzz"
-if curl -s -f "http://$DOMAIN/.well-known/acme-challenge/$(basename $TEST_FILE)" 2>/dev/null | grep -q "test-content"; then
-    echo "✅ Validation path is accessible"
-    rm -f $TEST_FILE
+sleep 2
+
+# Test from localhost first
+if curl -s -f "http://localhost/.well-known/acme-challenge/$TEST_NAME" 2>/dev/null | grep -q "test-content"; then
+    echo "✅ Validation path is accessible locally"
+    
+    # Test from domain (may fail if DNS not propagated)
+    if curl -s -f "http://$DOMAIN/.well-known/acme-challenge/$TEST_NAME" 2>/dev/null | grep -q "test-content"; then
+        echo "✅ Validation path is accessible via domain"
+    else
+        echo "⚠️  Domain test failed (may need DNS propagation)"
+        echo "   But local test passed, so configuration is correct"
+    fi
 else
-    echo "⚠️  Validation path test failed (may need DNS propagation)"
-    echo "   But configuration is correct, you can proceed with SSL setup"
-    rm -f $TEST_FILE
+    echo "⚠️  Local validation path test failed"
+    echo "   Check Nginx config manually"
 fi
+
+rm -f $TEST_FILE
 echo ""
 
 echo "═══════════════════════════════════════════════════════════════"
@@ -107,4 +146,8 @@ echo ""
 echo "📋 Next: Run SSL setup again"
 echo "   sudo bash scripts/setup-ssl-ec2.sh"
 echo ""
-
+echo "💡 If SSL still fails, check:"
+echo "   1. DNS is pointing to this server (remove 'Parked' A record)"
+echo "   2. Port 80 is accessible from internet"
+echo "   3. Nginx config: sudo nginx -t"
+echo ""
