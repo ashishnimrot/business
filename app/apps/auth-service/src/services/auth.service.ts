@@ -47,13 +47,9 @@ export class AuthService {
       );
     }
 
-    // For login, check if user exists
-    if (purpose === 'login') {
-      const userExists = await this.userRepository.phoneExists(phone);
-      if (!userExists) {
-        throw new BadRequestException('User not found. Please register first.');
-      }
-    }
+    // Note: We allow OTP requests for login even if user doesn't exist.
+    // The user will be automatically created during verifyOtp if they don't exist.
+    // This enables seamless registration/login flow for new users.
 
     // Create OTP request
     const { otpRequest, otp } = await this.otpService.createOtpRequest(

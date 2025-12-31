@@ -113,13 +113,27 @@ describe('AuthService', () => {
       ).rejects.toThrow(HttpException);
     });
 
-    it('should throw BadRequestException if user not found for login', async () => {
-      jest.spyOn(otpService, 'checkRateLimit').mockResolvedValue(true);
-      jest.spyOn(userRepository, 'phoneExists').mockResolvedValue(false);
+    it('should send OTP for login even if user does not exist (auto-registration)', async () => {
+      const mockOtpRequest = {
+        id: 'otp-2',
+        expires_at: new Date(Date.now() + 5 * 60 * 1000),
+      } as OtpRequest;
 
-      await expect(
-        service.sendOtp({ phone: '9876543210', purpose: 'login' })
-      ).rejects.toThrow(BadRequestException);
+      jest.spyOn(otpService, 'checkRateLimit').mockResolvedValue(true);
+      jest.spyOn(otpService, 'createOtpRequest').mockResolvedValue({
+        otpRequest: mockOtpRequest,
+        otp: '654321',
+      });
+      jest.spyOn(smsService, 'sendOtp').mockResolvedValue(true);
+
+      // Should succeed even if user doesn't exist - user will be created during verifyOtp
+      const result = await service.sendOtp({
+        phone: '9876543210',
+        purpose: 'login',
+      });
+
+      expect(result.otp_id).toBe('otp-2');
+      expect(result.message).toBe('OTP sent successfully');
     });
   });
 
