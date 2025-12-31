@@ -17,14 +17,14 @@ const API_CONFIG = {
   retryDelay: 1000, // 1 second base delay
 };
 
-// API Base URLs
+// API Base URLs - Use relative URLs for production (via Nginx proxy)
 export const API_URLS = {
-  auth: process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:3002/api/v1',
-  business: process.env.NEXT_PUBLIC_BUSINESS_API_URL || 'http://localhost:3003/api/v1',
-  party: process.env.NEXT_PUBLIC_PARTY_API_URL || 'http://localhost:3004/api/v1',
-  inventory: process.env.NEXT_PUBLIC_INVENTORY_API_URL || 'http://localhost:3005/api/v1',
-  invoice: process.env.NEXT_PUBLIC_INVOICE_API_URL || 'http://localhost:3006/api/v1',
-  payment: process.env.NEXT_PUBLIC_PAYMENT_API_URL || 'http://localhost:3007/api/v1',
+  auth: process.env.NEXT_PUBLIC_AUTH_API_URL || '/api/v1/auth',
+  business: process.env.NEXT_PUBLIC_BUSINESS_API_URL || '/api/v1/business',
+  party: process.env.NEXT_PUBLIC_PARTY_API_URL || '/api/v1/party',
+  inventory: process.env.NEXT_PUBLIC_INVENTORY_API_URL || '/api/v1/inventory',
+  invoice: process.env.NEXT_PUBLIC_INVOICE_API_URL || '/api/v1/invoice',
+  payment: process.env.NEXT_PUBLIC_PAYMENT_API_URL || '/api/v1/payment',
 };
 
 // Token storage keys
