@@ -54,6 +54,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - ENABLE_FAKE_OTP=true
       - ENABLE_SYNC=true
+    ports:
+      - "3002:3002"
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,6 +90,8 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - JWT_SECRET=${JWT_SECRET}
       - ENABLE_SYNC=true
+    ports:
+      - "3003:3003"
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,6 +128,8 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - JWT_SECRET=${JWT_SECRET}
       - ENABLE_SYNC=true
+    ports:
+      - "3004:3004"
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,6 +166,8 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - JWT_SECRET=${JWT_SECRET}
       - ENABLE_SYNC=true
+    ports:
+      - "3005:3005"
     depends_on:
       postgres:
         condition: service_healthy
@@ -196,6 +204,8 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - JWT_SECRET=${JWT_SECRET}
       - ENABLE_SYNC=true
+    ports:
+      - "3006:3006"
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,6 +242,8 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:3002
       - JWT_SECRET=${JWT_SECRET}
       - ENABLE_SYNC=true
+    ports:
+      - "3007:3007"
     depends_on:
       postgres:
         condition: service_healthy
