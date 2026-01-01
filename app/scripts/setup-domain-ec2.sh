@@ -253,15 +253,18 @@ echo "   curl -I http://$DOMAIN/api/v1/auth/health"
 echo ""
 # Test Let's Encrypt validation path
 echo "🧪 Testing Let's Encrypt validation path..."
+mkdir -p /var/www/html/.well-known/acme-challenge
+chown -R nginx:nginx /var/www/html 2>/dev/null || chown -R apache:apache /var/www/html 2>/dev/null || true
+chmod -R 755 /var/www/html
 TEST_FILE="/var/www/html/.well-known/acme-challenge/test"
-echo "test-content" > $TEST_FILE
-chmod 644 $TEST_FILE
-if curl -s -f "http://$DOMAIN/.well-known/acme-challenge/test" | grep -q "test-content" 2>/dev/null; then
+echo "test-content" > "$TEST_FILE" 2>/dev/null || true
+chmod 644 "$TEST_FILE" 2>/dev/null || true
+if curl -s -f "http://$DOMAIN/.well-known/acme-challenge/test" 2>/dev/null | grep -q "test-content" 2>/dev/null; then
     echo "✅ Let's Encrypt validation path is accessible"
-    rm -f $TEST_FILE
+    rm -f "$TEST_FILE" 2>/dev/null || true
 else
     echo "⚠️  Validation path test inconclusive (may need DNS propagation)"
-    rm -f $TEST_FILE
+    rm -f "$TEST_FILE" 2>/dev/null || true
 fi
 echo ""
 
