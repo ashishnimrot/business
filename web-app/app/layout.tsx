@@ -6,8 +6,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Business Manager - Manage Your Business with Ease",
-  description: "Complete business management solution for Indian businesses with GST, invoicing, inventory, and more.",
+  title: "Samruddhi - Business Management Platform",
+  description: "Complete business management solution for Indian businesses with GST, invoicing, inventory, and more. Drive prosperity with Samruddhi.",
 };
 
 export default function RootLayout({

@@ -11,7 +11,8 @@ set -e
 # Configuration with defaults
 REGION=${1:-ap-south-1}
 KEY_NAME=${2:-business-app-key}
-INSTANCE_TYPE=${3:-t3.medium}
+# Instance type will be prompted if not provided
+INSTANCE_TYPE=${3:-}
 GIT_REPO="https://github.com/ashishnimrot/business.git"
 
 # AWS Profile support (can be set via environment variable or passed as 4th argument)
@@ -28,6 +29,49 @@ echo "║     BUSINESS APP - UNIFIED AWS DEPLOYMENT                      ║"
 echo "║     Single Command End-to-End Deployment                      ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
+
+# Prompt for instance type if not provided
+if [ -z "$INSTANCE_TYPE" ]; then
+    echo "📋 Instance Type Selection"
+    echo "─────────────────────────────────────────────────────────────"
+    echo "Please select an instance type:"
+    echo ""
+    echo "  1. t3.micro  (Free Tier, 1 GB RAM - may have performance issues)"
+    echo "  2. t3.small  (2 GB RAM - good for testing)"
+    echo "  3. t3.medium (4 GB RAM - recommended for production)"
+    echo "  4. t3.large (8 GB RAM - high performance)"
+    echo "  5. Custom    (Enter your own instance type)"
+    echo ""
+    read -p "Choose option (1/2/3/4/5): " -n 1 -r
+    echo ""
+    
+    if [[ $REPLY =~ ^[1]$ ]]; then
+        INSTANCE_TYPE="t3.micro"
+        echo "✅ Selected: t3.micro (Free Tier)"
+    elif [[ $REPLY =~ ^[2]$ ]]; then
+        INSTANCE_TYPE="t3.small"
+        echo "✅ Selected: t3.small"
+    elif [[ $REPLY =~ ^[3]$ ]]; then
+        INSTANCE_TYPE="t3.medium"
+        echo "✅ Selected: t3.medium (Recommended)"
+    elif [[ $REPLY =~ ^[4]$ ]]; then
+        INSTANCE_TYPE="t3.large"
+        echo "✅ Selected: t3.large"
+    elif [[ $REPLY =~ ^[5]$ ]]; then
+        read -p "Enter instance type (e.g., t3.xlarge, m5.large): " INSTANCE_TYPE
+        if [ -z "$INSTANCE_TYPE" ]; then
+            echo "❌ No instance type provided. Using default: t3.medium"
+            INSTANCE_TYPE="t3.medium"
+        else
+            echo "✅ Selected: $INSTANCE_TYPE"
+        fi
+    else
+        echo "⚠️  Invalid option. Using default: t3.medium"
+        INSTANCE_TYPE="t3.medium"
+    fi
+    echo ""
+fi
+
 echo "📋 Configuration:"
 echo "   Region: $REGION"
 echo "   Key Name: $KEY_NAME"
@@ -995,42 +1039,9 @@ if [ -n "$DOMAIN" ] && [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "None" ]; then
         fi
     fi
     
-    # Step 3: Setup domain on EC2
+    # Step 3: Add HTTPS port to security group (before domain/SSL setup)
     echo ""
-    echo "🔧 Step 3: Setting up domain on EC2..."
-    SSH_KEY_FILE="$HOME/.ssh/$KEY_NAME.pem"
-    if [ ! -f "$SSH_KEY_FILE" ]; then
-        echo "❌ SSH key not found: $SSH_KEY_FILE"
-        echo "   Cannot setup domain automatically"
-        echo "   Please run manually:"
-        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
-        echo "   cd /opt/business-app/app"
-        echo "   sudo bash scripts/setup-domain-ec2.sh $DOMAIN"
-        exit 1
-    fi
-    
-    # Update domain setup script with actual domain
-    echo "   Connecting to EC2 and setting up domain..."
-    ssh -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@$PUBLIC_IP <<SSH_EOF
-cd /opt/business-app/app
-git pull origin main || true
-sudo bash scripts/setup-domain-ec2.sh "$DOMAIN"
-SSH_EOF
-    
-    if [ $? -eq 0 ]; then
-        echo "✅ Domain setup complete on EC2"
-    else
-        echo "❌ Domain setup failed"
-        echo "   Please run manually:"
-        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
-        echo "   cd /opt/business-app/app"
-        echo "   sudo bash scripts/setup-domain-ec2.sh $DOMAIN"
-        exit 1
-    fi
-    
-    # Step 4: Add HTTPS port to security group
-    echo ""
-    echo "🔒 Step 4: Adding HTTPS port (443) to security group..."
+    echo "🔒 Step 3: Ensuring HTTPS port (443) is open in security group..."
     HTTPS_EXISTS=$($AWS_CMD ec2 describe-security-groups \
         --region $REGION \
         --group-ids $SG_ID \
@@ -1049,43 +1060,74 @@ SSH_EOF
         echo "✅ Port 443 already allowed"
     fi
     
-    # Step 5: Setup SSL on EC2
+    # Step 4: Setup domain and SSL/HTTPS using comprehensive fix script
     echo ""
-    echo "🔐 Step 5: Setting up SSL/HTTPS..."
+    echo "🔐 Step 4: Setting up domain and SSL/HTTPS (comprehensive fix)..."
+    SSH_KEY_FILE="$HOME/.ssh/$KEY_NAME.pem"
+    if [ ! -f "$SSH_KEY_FILE" ]; then
+        echo "❌ SSH key not found: $SSH_KEY_FILE"
+        echo "   Cannot setup domain/SSL automatically"
+        echo "   Please run manually:"
+        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
+        echo "   cd /opt/business-app/app"
+        echo "   sudo bash scripts/fix-https-complete.sh $DOMAIN $EMAIL"
+        exit 1
+    fi
+    
     if [ -z "$EMAIL" ]; then
         EMAIL="admin@$DOMAIN"
     fi
     
-    echo "   Connecting to EC2 and setting up SSL..."
+    echo "   Connecting to EC2 and running comprehensive HTTPS fix..."
+    echo "   This will setup domain, SSL certificate, and configure HTTPS..."
+    echo "   (This may take 5-10 minutes)"
+    echo ""
+    
     ssh -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@$PUBLIC_IP <<SSH_EOF
+set -e
 cd /opt/business-app/app
-sudo bash scripts/setup-ssl-ec2.sh "$DOMAIN" "$EMAIL"
+
+# Pull latest code to ensure fix-https-complete.sh is available
+echo "📥 Pulling latest code..."
+git pull origin main || echo "⚠️  Git pull failed, continuing with existing code..."
+
+# Make sure the script is executable
+chmod +x scripts/fix-https-complete.sh 2>/dev/null || true
+
+# Run comprehensive HTTPS fix (handles domain setup, SSL, and all configurations)
+echo "🔧 Running comprehensive HTTPS fix..."
+sudo bash scripts/fix-https-complete.sh "$DOMAIN" "$EMAIL"
 SSH_EOF
     
-    SSL_EXIT_CODE=$?
+    HTTPS_EXIT_CODE=$?
     
-    if [ $SSL_EXIT_CODE -eq 0 ]; then
+    if [ $HTTPS_EXIT_CODE -eq 0 ]; then
         echo ""
-        echo "🔍 Step 6: Verifying HTTPS..."
+        echo "🔍 Step 5: Verifying HTTPS..."
         sleep 5  # Give Nginx time to reload
         
         # Test HTTPS connectivity
         if curl -s -f -m 10 "https://$DOMAIN" > /dev/null 2>&1; then
             echo "✅ HTTPS is working: https://$DOMAIN"
         else
-            echo "⚠️  HTTPS test failed, but certificate may still be valid"
-            echo "   This can happen if Nginx is still reloading"
-            echo "   Wait 1-2 minutes and test: curl -I https://$DOMAIN"
+            echo "⚠️  HTTPS test failed, but setup may still be in progress"
+            echo "   This can happen if:"
+            echo "   - DNS is still propagating (wait 10-30 minutes)"
+            echo "   - Certificate was just issued (wait 1-2 minutes)"
+            echo "   - Nginx is still reloading"
+            echo ""
+            echo "   Test manually: curl -I https://$DOMAIN"
         fi
         
         # Verify certificate renewal is set up
         echo ""
         echo "🔍 Verifying certificate renewal setup..."
         ssh -i "$SSH_KEY_FILE" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ec2-user@$PUBLIC_IP <<SSH_EOF
-if systemctl is-active --quiet certbot-renew.timer 2>/dev/null || systemctl is-active --quiet certbot-renew.timer 2>/dev/null; then
+if systemctl is-active --quiet certbot-renew.timer 2>/dev/null || systemctl list-timers | grep -q certbot 2>/dev/null; then
     echo "✅ Certificate auto-renewal is configured"
 else
     echo "⚠️  Certificate renewal timer not found (may be using cron instead)"
+    echo "   Certbot typically sets up auto-renewal automatically"
 fi
 SSH_EOF
         
@@ -1095,8 +1137,8 @@ SSH_EOF
         echo "═══════════════════════════════════════════════════════════════"
         echo ""
         echo "🌐 Your application is now accessible via HTTPS:"
-        echo "   https://$DOMAIN"
-        echo "   https://www.$DOMAIN"
+        echo "   ✅ https://$DOMAIN"
+        echo "   ✅ https://www.$DOMAIN"
         echo ""
         echo "✅ HTTP automatically redirects to HTTPS"
         echo "✅ SSL certificate auto-renews every 90 days"
@@ -1111,18 +1153,25 @@ SSH_EOF
         echo "   curl -I https://$DOMAIN"
     else
         echo ""
-        echo "❌ SSL setup failed (exit code: $SSL_EXIT_CODE)"
+        echo "❌ HTTPS setup failed (exit code: $HTTPS_EXIT_CODE)"
         echo ""
-        echo "⚠️  Check logs on EC2:"
-        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
-        echo "   sudo tail -f /var/log/letsencrypt/letsencrypt.log"
+        echo "⚠️  Troubleshooting:"
+        echo "   1. Check logs on EC2:"
+        echo "      ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
+        echo "      sudo tail -f /var/log/letsencrypt/letsencrypt.log"
+        echo "      sudo tail -f /var/log/nginx/error.log"
         echo ""
-        echo "   Or run manually:"
-        echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
-        echo "   cd /opt/business-app/app"
-        echo "   sudo bash scripts/setup-ssl-ec2.sh $DOMAIN $EMAIL"
+        echo "   2. Run fix manually:"
+        echo "      ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@$PUBLIC_IP"
+        echo "      cd /opt/business-app/app"
+        echo "      sudo bash scripts/fix-https-complete.sh $DOMAIN $EMAIL"
         echo ""
-        echo "⚠️  Deployment completed but SSL setup failed"
+        echo "   3. Check prerequisites:"
+        echo "      - DNS must point to EC2 IP: dig $DOMAIN +short"
+        echo "      - Security group must allow ports 80 and 443"
+        echo "      - Services must be running: docker ps"
+        echo ""
+        echo "⚠️  Deployment completed but HTTPS setup failed"
         echo "   Application is accessible via HTTP: http://$PUBLIC_IP"
         exit 1
     fi
@@ -1132,11 +1181,10 @@ elif [ -n "$DOMAIN" ]; then
     echo "   Once instance has public IP, run:"
     echo "   ssh -i ~/.ssh/$KEY_NAME.pem ec2-user@<PUBLIC_IP>"
     echo "   cd /opt/business-app/app"
-    echo "   sudo bash scripts/setup-domain-ec2.sh $DOMAIN"
     if [ -n "$EMAIL" ]; then
-        echo "   sudo bash scripts/setup-ssl-ec2.sh $DOMAIN $EMAIL"
+        echo "   sudo bash scripts/fix-https-complete.sh $DOMAIN $EMAIL"
     else
-        echo "   sudo bash scripts/setup-ssl-ec2.sh $DOMAIN"
+        echo "   sudo bash scripts/fix-https-complete.sh $DOMAIN"
     fi
 fi
 

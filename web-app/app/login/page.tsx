@@ -166,66 +166,107 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">
-            Business Manager
-          </CardTitle>
-          <CardDescription className="text-center">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      {/* Decorative background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-8 left-1/3 w-96 h-96 bg-pink-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+      </div>
+
+      <Card className="w-full max-w-md relative z-10 shadow-2xl border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+        <CardHeader className="space-y-4 pb-6">
+          {/* Logo and Brand */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="w-20 h-20 flex items-center justify-center">
+              <img
+                src="/samruddhi-logo.svg"
+                alt="Samruddhi Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div className="text-center space-y-1">
+              <CardTitle className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                Samruddhi
+              </CardTitle>
+              <p className="text-sm text-muted-foreground font-medium">
+                Business Management Platform
+              </p>
+            </div>
+          </div>
+          <CardDescription className="text-center text-base pt-2">
             {step === 'phone'
               ? 'Enter your phone number to receive OTP'
               : 'Enter the 6-digit OTP sent to your phone'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
           {step === 'phone' ? (
-            <form onSubmit={handlePhoneSubmit} className="space-y-4">
+            <form onSubmit={handlePhoneSubmit} className="space-y-5">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Phone Number</label>
-                <div className="flex">
-                  <div className="flex items-center px-3 bg-gray-100 border border-r-0 border-gray-300 rounded-l-md">
-                    <span className="text-gray-600">+91</span>
+                <label className="text-sm font-semibold text-foreground">Phone Number</label>
+                <div className="flex shadow-sm">
+                  <div className="flex items-center px-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border border-r-0 border-gray-300 dark:border-gray-600 rounded-l-lg">
+                    <span className="text-gray-700 dark:text-gray-300 font-semibold">+91</span>
                   </div>
                   <Input
                     type="tel"
                     placeholder="9876543210"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                    className="rounded-l-none"
+                    className="rounded-l-none border-l-0 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     maxLength={10}
                     disabled={isLoading}
                   />
                 </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && (
+                  <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1 mt-1">
+                    <span>⚠</span> {error}
+                  </p>
+                )}
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Sending...' : 'Send OTP'}
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold py-6 shadow-lg hover:shadow-xl transition-all duration-200" 
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin">⏳</span> Sending OTP...
+                  </span>
+                ) : (
+                  'Send OTP'
+                )}
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-4">
+            <form onSubmit={handleOtpSubmit} className="space-y-5">
               <div className="space-y-2">
-                <label className="text-sm font-medium">OTP</label>
+                <label className="text-sm font-semibold text-foreground">Enter OTP</label>
                 <Input
                   type="text"
-                  placeholder="123456"
+                  placeholder="000000"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className="text-center text-2xl tracking-widest"
+                  className="text-center text-3xl tracking-[0.5em] font-bold h-16 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   maxLength={6}
                   disabled={isLoading}
                 />
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && (
+                  <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1 mt-1">
+                    <span>⚠</span> {error}
+                  </p>
+                )}
               </div>
               
-              <div className="text-sm text-center space-y-2">
-                <div className="text-gray-600">
-                  Sent to +91 {phone}
+              <div className="text-sm text-center space-y-3 py-2">
+                <div className="text-muted-foreground flex items-center justify-center gap-2">
+                  <span>📱</span>
+                  <span>Sent to +91 {phone}</span>
                   <Button
                     type="button"
                     variant="link"
-                    className="ml-2 p-0 h-auto"
+                    className="ml-2 p-0 h-auto text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-semibold"
                     onClick={() => {
                       setStep('phone');
                       setOtp('');
@@ -238,29 +279,44 @@ export default function LoginPage() {
                   </Button>
                 </div>
                 {displayOtp && (
-                  <div className="text-green-600 font-semibold">
-                    Your OTP: {displayOtp}
+                  <div className="text-green-600 dark:text-green-400 font-semibold bg-green-50 dark:bg-green-900/20 py-2 px-4 rounded-lg border border-green-200 dark:border-green-800">
+                    🔑 Your OTP: {displayOtp}
                   </div>
                 )}
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Verifying...' : 'Verify OTP'}
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold py-6 shadow-lg hover:shadow-xl transition-all duration-200" 
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin">⏳</span> Verifying...
+                  </span>
+                ) : (
+                  'Verify OTP'
+                )}
               </Button>
 
               <Button
                 type="button"
-                variant="ghost"
-                className="w-full"
+                variant="outline"
+                className="w-full border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
                 onClick={handleResendOtp}
                 disabled={isLoading}
               >
-                Resend OTP
+                {isLoading ? 'Sending...' : 'Resend OTP'}
               </Button>
             </form>
           )}
         </CardContent>
       </Card>
+      
+      {/* Footer text */}
+      <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-muted-foreground z-10">
+        <p>© 2024 Samruddhi. All rights reserved.</p>
+      </div>
     </div>
   );
 }
