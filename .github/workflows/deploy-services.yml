@@ -1,0 +1,421 @@
+name: Service-Based CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/apps/auth-service/**'
+      - 'app/apps/business-service/**'
+      - 'app/apps/inventory-service/**'
+      - 'app/apps/invoice-service/**'
+      - 'app/apps/party-service/**'
+      - 'app/apps/payment-service/**'
+      - 'web-app/**'
+      - 'app/docker-compose.prod.yml'
+      - 'app/Dockerfile'
+      - 'app/package.json'
+      - 'app/package-lock.json'
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Comma-separated list of services to deploy (e.g., auth-service,business-service) or "all" for all services'
+        required: true
+        default: 'all'
+      force_deploy:
+        description: 'Force deployment even if no changes detected'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_PROFILE: business-app
+  KEY_NAME: business-app-key
+  INSTANCE_TAG: business-app-beta
+
+jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      auth-service: ${{ steps.changes.outputs.auth-service }}
+      business-service: ${{ steps.changes.outputs.business-service }}
+      inventory-service: ${{ steps.changes.outputs.inventory-service }}
+      invoice-service: ${{ steps.changes.outputs.invoice-service }}
+      party-service: ${{ steps.changes.outputs.party-service }}
+      payment-service: ${{ steps.changes.outputs.payment-service }}
+      web-app: ${{ steps.changes.outputs.web-app }}
+      shared: ${{ steps.changes.outputs.shared }}
+      any-changes: ${{ steps.changes.outputs.any-changes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          echo "Detecting changed services..."
+          
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual trigger - check which services to deploy
+            SERVICES="${{ github.event.inputs.services }}"
+            if [ "$SERVICES" == "all" ]; then
+              echo "auth-service=true" >> $GITHUB_OUTPUT
+              echo "business-service=true" >> $GITHUB_OUTPUT
+              echo "inventory-service=true" >> $GITHUB_OUTPUT
+              echo "invoice-service=true" >> $GITHUB_OUTPUT
+              echo "party-service=true" >> $GITHUB_OUTPUT
+              echo "payment-service=true" >> $GITHUB_OUTPUT
+              echo "web-app=true" >> $GITHUB_OUTPUT
+              echo "any-changes=true" >> $GITHUB_OUTPUT
+            else
+              IFS=',' read -ra SERVICE_ARRAY <<< "$SERVICES"
+              for service in "${SERVICE_ARRAY[@]}"; do
+                service=$(echo "$service" | xargs) # trim whitespace
+                echo "${service}=true" >> $GITHUB_OUTPUT
+              done
+              echo "any-changes=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Automatic trigger - detect changes
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+            
+            AUTH_CHANGED=false
+            BUSINESS_CHANGED=false
+            INVENTORY_CHANGED=false
+            INVOICE_CHANGED=false
+            PARTY_CHANGED=false
+            PAYMENT_CHANGED=false
+            WEB_APP_CHANGED=false
+            SHARED_CHANGED=false
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/apps/auth-service|app/docker-compose|app/Dockerfile|app/package"; then
+              AUTH_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/apps/business-service|app/docker-compose|app/Dockerfile|app/package"; then
+              BUSINESS_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/apps/inventory-service|app/docker-compose|app/Dockerfile|app/package"; then
+              INVENTORY_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/apps/invoice-service|app/docker-compose|app/Dockerfile|app/package"; then
+              INVOICE_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/apps/party-service|app/docker-compose|app/Dockerfile|app/package"; then
+              PARTY_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/apps/payment-service|app/docker-compose|app/Dockerfile|app/package"; then
+              PAYMENT_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "web-app/"; then
+              WEB_APP_CHANGED=true
+            fi
+            
+            if echo "$CHANGED_FILES" | grep -qE "app/docker-compose|app/Dockerfile|app/package|app/libs/shared"; then
+              SHARED_CHANGED=true
+            fi
+            
+            # If shared changed, mark all services as changed
+            if [ "$SHARED_CHANGED" == "true" ]; then
+              AUTH_CHANGED=true
+              BUSINESS_CHANGED=true
+              INVENTORY_CHANGED=true
+              INVOICE_CHANGED=true
+              PARTY_CHANGED=true
+              PAYMENT_CHANGED=true
+            fi
+            
+            echo "auth-service=$AUTH_CHANGED" >> $GITHUB_OUTPUT
+            echo "business-service=$BUSINESS_CHANGED" >> $GITHUB_OUTPUT
+            echo "inventory-service=$INVENTORY_CHANGED" >> $GITHUB_OUTPUT
+            echo "invoice-service=$INVOICE_CHANGED" >> $GITHUB_OUTPUT
+            echo "party-service=$PARTY_CHANGED" >> $GITHUB_OUTPUT
+            echo "payment-service=$PAYMENT_CHANGED" >> $GITHUB_OUTPUT
+            echo "web-app=$WEB_APP_CHANGED" >> $GITHUB_OUTPUT
+            echo "shared=$SHARED_CHANGED" >> $GITHUB_OUTPUT
+            
+            if [ "$AUTH_CHANGED" == "true" ] || [ "$BUSINESS_CHANGED" == "true" ] || \
+               [ "$INVENTORY_CHANGED" == "true" ] || [ "$INVOICE_CHANGED" == "true" ] || \
+               [ "$PARTY_CHANGED" == "true" ] || [ "$PAYMENT_CHANGED" == "true" ] || \
+               [ "$WEB_APP_CHANGED" == "true" ]; then
+              echo "any-changes=true" >> $GITHUB_OUTPUT
+            else
+              echo "any-changes=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          echo "Change detection complete:"
+          echo "  auth-service: ${{ steps.changes.outputs.auth-service }}"
+          echo "  business-service: ${{ steps.changes.outputs.business-service }}"
+          echo "  inventory-service: ${{ steps.changes.outputs.inventory-service }}"
+          echo "  invoice-service: ${{ steps.changes.outputs.invoice-service }}"
+          echo "  party-service: ${{ steps.changes.outputs.party-service }}"
+          echo "  payment-service: ${{ steps.changes.outputs.payment-service }}"
+          echo "  web-app: ${{ steps.changes.outputs.web-app }}"
+          echo "  shared: ${{ steps.changes.outputs.shared }}"
+
+  deploy-services:
+    name: Deploy Services to EC2
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any-changes == 'true'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get EC2 instance details
+        id: ec2-info
+        run: |
+          echo "Finding EC2 instance..."
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region ${{ env.AWS_REGION }} \
+            --filters "Name=tag:Name,Values=${{ env.INSTANCE_TAG }}" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text)
+          
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" == "None" ]; then
+            echo "❌ No running EC2 instance found with tag: ${{ env.INSTANCE_TAG }}"
+            exit 1
+          fi
+          
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --region ${{ env.AWS_REGION }} \
+            --instance-ids $INSTANCE_ID \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          
+          echo "instance-id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+          echo "public-ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          echo "✅ Found instance: $INSTANCE_ID at $PUBLIC_IP"
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/${{ env.KEY_NAME }}.pem
+          chmod 600 ~/.ssh/${{ env.KEY_NAME }}.pem
+          ssh-keyscan -H ${{ steps.ec2-info.outputs.public-ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to EC2
+        run: |
+          CHANGED_SERVICES="${{ steps.services-list.outputs.services }}"
+          PUBLIC_IP="${{ steps.ec2-info.outputs.public-ip }}"
+          SSH_KEY="$HOME/.ssh/${{ env.KEY_NAME }}.pem"
+          
+          echo "🚀 Starting deployment to EC2..."
+          echo "Changed services: $CHANGED_SERVICES"
+          
+          ssh -i "$SSH_KEY" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            ec2-user@$PUBLIC_IP bash -s << EOF
+          set -e
+          
+          CHANGED_SERVICES="${{ steps.services-list.outputs.services }}"
+          
+          echo "📦 Fetching latest code from main branch..."
+          cd /opt/business-app
+          
+          # Check if git repo exists
+          if [ ! -d .git ]; then
+            echo "❌ Git repository not found. Initializing..."
+            git init
+            git remote add origin https://github.com/ashishnimrot/business.git || true
+          fi
+          
+          # Fetch and reset to latest main
+          git fetch origin main
+          git reset --hard origin/main
+          git clean -fd
+          
+          echo "✅ Code updated to latest main"
+          echo "   Current commit: \$(git rev-parse --short HEAD)"
+          echo ""
+          
+          # Determine which services to rebuild
+          SERVICES_TO_REBUILD="\$CHANGED_SERVICES"
+          
+          echo "🔨 Rebuilding and restarting services: \$SERVICES_TO_REBUILD"
+          echo ""
+          
+          cd /opt/business-app/app
+          
+          # Load environment variables
+          if [ -f .env.production ]; then
+            set -a
+            source .env.production
+            set +a
+            echo "✅ Loaded environment variables"
+          else
+            echo "⚠️  .env.production not found, using existing .env"
+            if [ -f .env ]; then
+              set -a
+              source .env
+              set +a
+            fi
+          fi
+          
+          # Function to rebuild and restart a service
+          rebuild_service() {
+            local service=\$1
+            echo "🔄 Rebuilding \$service..."
+            docker-compose -f docker-compose.prod.yml build \$service || {
+              echo "❌ Failed to build \$service"
+              return 1
+            }
+            echo "🔄 Restarting \$service..."
+            docker-compose -f docker-compose.prod.yml up -d \$service || {
+              echo "❌ Failed to restart \$service"
+              return 1
+            }
+            echo "✅ \$service rebuilt and restarted"
+            echo ""
+          }
+          
+          # Rebuild services based on what changed
+          if [ "\$SERVICES_TO_REBUILD" == "all" ] || echo "\$SERVICES_TO_REBUILD" | grep -q "shared"; then
+            echo "🔄 Shared libraries or all services changed, rebuilding everything..."
+            docker-compose -f docker-compose.prod.yml build
+            docker-compose -f docker-compose.prod.yml up -d
+            echo "✅ All services rebuilt and restarted"
+          else
+            # Rebuild individual services
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "auth-service"; then
+              rebuild_service auth-service
+            fi
+            
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "business-service"; then
+              rebuild_service business-service
+            fi
+            
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "party-service"; then
+              rebuild_service party-service
+            fi
+            
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "inventory-service"; then
+              rebuild_service inventory-service
+            fi
+            
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "invoice-service"; then
+              rebuild_service invoice-service
+            fi
+            
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "payment-service"; then
+              rebuild_service payment-service
+            fi
+            
+            if echo "\$SERVICES_TO_REBUILD" | grep -q "web-app"; then
+              rebuild_service web-app
+            fi
+          fi
+          
+          echo "⏳ Waiting for services to be healthy..."
+          sleep 30
+          
+          echo ""
+          echo "📊 Service status:"
+          docker-compose -f docker-compose.prod.yml ps
+          
+          echo ""
+          echo "✅ Deployment complete!"
+          EOF
+
+      - name: Build services list
+        id: services-list
+        run: |
+          SERVICES=""
+          
+          if [ "${{ needs.detect-changes.outputs.auth-service }}" == "true" ]; then
+            SERVICES="${SERVICES}auth-service,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.business-service }}" == "true" ]; then
+            SERVICES="${SERVICES}business-service,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.inventory-service }}" == "true" ]; then
+            SERVICES="${SERVICES}inventory-service,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.invoice-service }}" == "true" ]; then
+            SERVICES="${SERVICES}invoice-service,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.party-service }}" == "true" ]; then
+            SERVICES="${SERVICES}party-service,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.payment-service }}" == "true" ]; then
+            SERVICES="${SERVICES}payment-service,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.web-app }}" == "true" ]; then
+            SERVICES="${SERVICES}web-app,"
+          fi
+          if [ "${{ needs.detect-changes.outputs.shared }}" == "true" ]; then
+            SERVICES="${SERVICES}shared,"
+          fi
+          
+          # Remove trailing comma
+          SERVICES=$(echo "$SERVICES" | sed 's/,$//')
+          
+          if [ -z "$SERVICES" ]; then
+            SERVICES="all"
+          fi
+          
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "Services to deploy: $SERVICES"
+
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          sleep 10
+          
+          PUBLIC_IP="${{ steps.ec2-info.outputs.public-ip }}"
+          SSH_KEY="~/.ssh/${{ env.KEY_NAME }}.pem"
+          
+          # Check if services are running
+          ssh -i "$SSH_KEY" \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            ec2-user@$PUBLIC_IP \
+            "cd /opt/business-app/app && docker-compose -f docker-compose.prod.yml ps"
+          
+          # Check if web app is accessible
+          if curl -f -s -m 10 "http://$PUBLIC_IP" > /dev/null; then
+            echo "✅ Web app is accessible"
+          else
+            echo "⚠️  Web app may not be fully ready yet"
+          fi
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Instance:** ${{ steps.ec2-info.outputs.instance-id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Public IP:** ${{ steps.ec2-info.outputs.public-ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Services Deployed:** ${{ steps.services-list.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Changed Services:**" >> $GITHUB_STEP_SUMMARY
+          echo "- auth-service: ${{ needs.detect-changes.outputs.auth-service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- business-service: ${{ needs.detect-changes.outputs.business-service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- inventory-service: ${{ needs.detect-changes.outputs.inventory-service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- invoice-service: ${{ needs.detect-changes.outputs.invoice-service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- party-service: ${{ needs.detect-changes.outputs.party-service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- payment-service: ${{ needs.detect-changes.outputs.payment-service }}" >> $GITHUB_STEP_SUMMARY
+          echo "- web-app: ${{ needs.detect-changes.outputs.web-app }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **Application URL:** http://${{ steps.ec2-info.outputs.public-ip }}" >> $GITHUB_STEP_SUMMARY
+
