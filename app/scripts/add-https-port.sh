@@ -17,18 +17,29 @@ if ! command -v aws &> /dev/null; then
     exit 1
 fi
 
-# Get instance ID
+# Get instance ID (check for business-app-beta* to handle numbered instances)
 echo "🔍 Finding EC2 instance..."
 INSTANCE_ID=$(aws ec2 describe-instances \
     --region $REGION \
-    --filters "Name=tag:Name,Values=business-app-beta" "Name=instance-state-name,Values=running" \
+    --filters "Name=tag:Name,Values=business-app-beta*" "Name=instance-state-name,Values=running" \
     --query 'Reservations[0].Instances[0].InstanceId' \
     --output text 2>/dev/null || echo "")
 
 if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
-    echo "❌ Could not find running EC2 instance"
-    echo "   Check: aws ec2 describe-instances --region $REGION"
-    exit 1
+    echo "⚠️  Could not find instance with tag 'business-app-beta*'"
+    echo "   Trying to find any running instance..."
+    INSTANCE_ID=$(aws ec2 describe-instances \
+        --region $REGION \
+        --filters "Name=instance-state-name,Values=running" \
+        --query 'Reservations[0].Instances[0].InstanceId' \
+        --output text 2>/dev/null || echo "")
+    
+    if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+        echo "❌ Could not find any running EC2 instance"
+        echo "   Check: aws ec2 describe-instances --region $REGION"
+        exit 1
+    fi
+    echo "   Found instance: $INSTANCE_ID (may not be business-app-beta)"
 fi
 
 echo "✅ Found instance: $INSTANCE_ID"
