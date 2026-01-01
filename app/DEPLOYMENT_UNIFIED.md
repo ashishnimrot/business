@@ -89,6 +89,7 @@ AWS_PROFILE=business-app make deploy-aws-quick
   - Stock endpoints (`/api/v1/stock`)
   - Invoice service (`/api/v1/invoices`)
   - Payment service (`/api/v1/payments`)
+- ✅ Let's Encrypt validation path configured
 - ✅ Nginx config test
 - ✅ Nginx restart and enable
 - ✅ Backend connectivity verification
@@ -173,6 +174,117 @@ docker ps
 cd /opt/business-app/app
 docker-compose -f docker-compose.prod.yml logs --tail=50
 ```
+
+## 🌐 Domain & SSL Setup (Post-Deployment)
+
+### Step 1: Configure Domain DNS
+
+1. **Purchase/Configure Domain** (e.g., `samriddhi.buzz`)
+2. **Add A Record in DNS Provider (GoDaddy, etc.):**
+   - Type: `A`
+   - Name: `@` (root domain)
+   - Value: Your EC2 Public IP
+   - TTL: `600`
+3. **Add CNAME for www (optional):**
+   - Type: `CNAME`
+   - Name: `www`
+   - Value: `@`
+
+**⚠️ Important:** Remove any "Parked" or conflicting A records.
+
+### Step 2: Setup Domain on EC2
+
+```bash
+# SSH into EC2
+ssh -i ~/.ssh/business-app-key.pem ec2-user@<YOUR_EC2_IP>
+
+# Navigate to app directory
+cd /opt/business-app/app
+
+# Pull latest code
+git pull origin main
+
+# Run domain setup
+sudo bash scripts/setup-domain-ec2.sh
+```
+
+### Step 3: Add HTTPS Port to Security Group
+
+**From your local machine:**
+
+```bash
+cd app
+bash scripts/add-https-port.sh ap-south-1
+```
+
+**Or manually:**
+- AWS Console → EC2 → Security Groups → Your SG → Inbound Rules
+- Add: Port 443, Protocol TCP, Source 0.0.0.0/0
+
+### Step 4: Setup SSL/HTTPS
+
+```bash
+# On EC2 instance
+cd /opt/business-app/app
+
+# Run SSL setup
+sudo bash scripts/setup-ssl-ec2.sh
+```
+
+**What it does:**
+- ✅ Installs Certbot (Let's Encrypt)
+- ✅ Obtains SSL certificate
+- ✅ Configures Nginx for HTTPS
+- ✅ Enables HTTP to HTTPS redirect
+- ✅ Sets up auto-renewal
+
+### Step 5: Verify HTTPS
+
+```bash
+# Test HTTPS
+curl -I https://samriddhi.buzz
+
+# Check SSL status
+sudo bash scripts/check-ssl-status.sh
+```
+
+**Result:**
+- ✅ `https://samriddhi.buzz` works
+- ✅ `http://samriddhi.buzz` redirects to HTTPS
+- ✅ Certificate auto-renews every 90 days
+
+### Domain & SSL Troubleshooting
+
+**Check SSL Status:**
+```bash
+sudo bash scripts/check-ssl-status.sh
+```
+
+**Common Issues:**
+
+1. **DNS not resolving:**
+   ```bash
+   dig samriddhi.buzz +short
+   # Should show your EC2 IP
+   ```
+
+2. **Port 443 not accessible:**
+   ```bash
+   # From local machine
+   bash scripts/add-https-port.sh ap-south-1
+   ```
+
+3. **SSL validation fails:**
+   - Ensure domain setup was run first
+   - Wait 10-30 minutes for DNS propagation
+   - Remove "Parked" A records from DNS
+
+4. **Certificate not obtained:**
+   - Check validation path: `curl http://samriddhi.buzz/.well-known/acme-challenge/test`
+   - Ensure port 80 accessible from internet
+   - Check Nginx: `sudo nginx -t`
+
+For detailed SSL guide, see: `SSL_SETUP_GUIDE.md` and `DOMAIN_SETUP_GUIDE.md`
 
 ## 📝 Configuration Files
 

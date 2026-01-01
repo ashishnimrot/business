@@ -37,7 +37,7 @@ The `deploy-aws` command automatically:
 3. ✅ Creates key pair (`business-app-key`) if needed
 4. ✅ Finds VPC and subnet
 5. ✅ Creates security group (ports 22, 80, 443 only)
-6. ✅ Launches EC2 instance (t3.small by default)
+6. ✅ Launches EC2 instance (t3.medium by default)
 7. ✅ Installs Docker, Docker Compose, Nginx, Node.js
 8. ✅ Clones repository from GitHub: `https://github.com/ashishnimrot/business.git`
 9. ✅ Generates secure passwords automatically
@@ -45,6 +45,8 @@ The `deploy-aws` command automatically:
 11. ✅ Configures Nginx reverse proxy
 12. ✅ Sets up automatic backups
 13. ✅ Returns application URL
+
+**Note:** Domain and SSL setup are done separately after deployment (see Domain & SSL Setup section below).
 
 ## Architecture
 
@@ -78,6 +80,124 @@ The script will output:
 
 - **Web App:** `http://<PUBLIC_IP>`
 - **APIs:** `http://<PUBLIC_IP>/api/v1/*`
+
+## Domain & SSL Setup (Optional but Recommended)
+
+### Step 1: Configure Domain DNS
+
+1. **Purchase/Configure Domain** (e.g., `samriddhi.buzz`)
+2. **Add A Record in GoDaddy (or your DNS provider):**
+   - Type: `A`
+   - Name: `@` (root domain)
+   - Value: Your EC2 Public IP (e.g., `13.203.216.163`)
+   - TTL: `600`
+3. **Add CNAME for www (optional):**
+   - Type: `CNAME`
+   - Name: `www`
+   - Value: `@`
+   - TTL: `3600`
+
+**Important:** Remove any "Parked" or conflicting A records.
+
+### Step 2: Setup Domain on EC2
+
+```bash
+# SSH into EC2
+ssh -i ~/.ssh/business-app-key.pem ec2-user@<YOUR_EC2_IP>
+
+# Navigate to app directory
+cd /opt/business-app/app
+
+# Pull latest code
+git pull origin main
+
+# Run domain setup script
+sudo bash scripts/setup-domain-ec2.sh
+```
+
+This will:
+- ✅ Update Nginx to recognize your domain
+- ✅ Configure Let's Encrypt validation path
+- ✅ Test and restart Nginx
+
+### Step 3: Add HTTPS Port to Security Group
+
+**From your local machine:**
+
+```bash
+cd app
+bash scripts/add-https-port.sh ap-south-1
+```
+
+**Or manually in AWS Console:**
+- EC2 → Security Groups → Your SG → Inbound Rules
+- Add Rule: Port 443, Protocol TCP, Source 0.0.0.0/0
+
+### Step 4: Setup SSL/HTTPS
+
+```bash
+# On EC2 instance
+cd /opt/business-app/app
+
+# Run SSL setup script
+sudo bash scripts/setup-ssl-ec2.sh
+```
+
+This will:
+- ✅ Install Certbot (Let's Encrypt client)
+- ✅ Obtain SSL certificate for your domain
+- ✅ Configure Nginx for HTTPS
+- ✅ Setup automatic certificate renewal
+- ✅ Enable HTTP to HTTPS redirect
+
+### Step 5: Verify HTTPS
+
+After SSL setup completes:
+
+```bash
+# Test HTTPS
+curl -I https://samriddhi.buzz
+
+# Or open in browser
+# https://samriddhi.buzz
+```
+
+**Expected Result:**
+- ✅ `https://samriddhi.buzz` works
+- ✅ `http://samriddhi.buzz` redirects to HTTPS
+- ✅ Certificate valid for 90 days (auto-renews)
+
+### Domain & SSL Troubleshooting
+
+**Check SSL Status:**
+```bash
+# On EC2
+sudo bash scripts/check-ssl-status.sh
+```
+
+**Common Issues:**
+
+1. **DNS not resolving:**
+   ```bash
+   dig samriddhi.buzz +short
+   # Should show your EC2 IP
+   ```
+
+2. **Port 443 not accessible:**
+   - Run: `bash scripts/add-https-port.sh ap-south-1`
+   - Or add manually in AWS Console
+
+3. **SSL validation fails:**
+   - Ensure domain setup script was run first
+   - Check DNS propagation (wait 10-30 minutes)
+   - Verify no "Parked" A records in DNS
+
+4. **Certificate not obtained:**
+   - Check validation path: `curl http://samriddhi.buzz/.well-known/acme-challenge/test`
+   - Ensure port 80 is accessible from internet
+   - Check Nginx config: `sudo nginx -t`
+
+For detailed SSL setup guide, see: `SSL_SETUP_GUIDE.md`
 
 ### SSH Access
 
