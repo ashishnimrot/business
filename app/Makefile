@@ -5,7 +5,7 @@
 # Usage: make <target>
 # =============================================================================
 
-.PHONY: help install dev start stop restart logs test test-unit test-integration test-e2e test-all build clean deploy health
+.PHONY: help install dev start stop restart logs test test-unit test-integration test-e2e test-all build clean deploy health backup backup-s3 backup-local backup-upload
 
 # Default target
 .DEFAULT_GOAL := help
@@ -354,6 +354,38 @@ db-migrate: ## Run RBAC migrations on all databases (auth_db + business_db)
 	@echo "$(GREEN)✅ Migrations complete$(NC)"
 
 # =============================================================================
+# BACKUP
+# =============================================================================
+backup: ## Backup all databases to S3 (usage: make backup BUCKET=my-backup-bucket)
+	@echo "$(BLUE)💾 Backing up databases to S3...$(NC)"
+	@if [ -z "$(BUCKET)" ]; then \
+		echo "$(YELLOW)⚠️  No bucket specified. Using AWS_S3_BACKUP_BUCKET env var or will prompt$(NC)"; \
+		bash scripts/backup-and-upload-to-s3.sh; \
+	else \
+		echo "$(BLUE)Using bucket: $(BUCKET)$(NC)"; \
+		bash scripts/backup-and-upload-to-s3.sh "$(BUCKET)"; \
+	fi
+	@echo "$(GREEN)✅ Backup complete$(NC)"
+
+backup-s3: backup ## Alias for backup
+
+backup-local: ## Create local database backups only (no S3 upload)
+	@echo "$(BLUE)💾 Creating local database backups...$(NC)"
+	@bash scripts/backup-db.sh
+	@echo "$(GREEN)✅ Local backups created in ./backups$(NC)"
+
+backup-upload: ## Upload existing backups to S3 (usage: make backup-upload BUCKET=my-backup-bucket)
+	@echo "$(BLUE)☁️  Uploading backups to S3...$(NC)"
+	@if [ -z "$(BUCKET)" ]; then \
+		echo "$(YELLOW)⚠️  No bucket specified. Using AWS_S3_BACKUP_BUCKET env var or will prompt$(NC)"; \
+		bash scripts/upload-backup-to-s3.sh; \
+	else \
+		echo "$(BLUE)Using bucket: $(BUCKET)$(NC)"; \
+		bash scripts/upload-backup-to-s3.sh "$(BUCKET)"; \
+	fi
+	@echo "$(GREEN)✅ Upload complete$(NC)"
+
+# =============================================================================
 # VERIFICATION
 # =============================================================================
 verify-types: ## Verify TypeScript types for all services
@@ -379,6 +411,7 @@ ti: test-integration ## Alias for test-integration
 te: test-e2e ## Alias for test-e2e
 t360: test-360 ## Alias for test-360
 h: health ## Alias for health
+b: backup ## Alias for backup
 
 status: ## Check status of all services
 	@echo "$(BLUE)🔍 Checking service status...$(NC)"
