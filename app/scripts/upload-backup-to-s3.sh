@@ -54,45 +54,181 @@ if [ -z "$S3_BUCKET" ]; then
     fi
 fi
 
+# Validate bucket name format (S3 naming rules)
+if ! echo "$S3_BUCKET" | grep -qE '^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$'; then
+    echo -e "${RED}✗ Invalid bucket name: $S3_BUCKET${NC}"
+    echo -e "${YELLOW}  Bucket names must:${NC}"
+    echo -e "${YELLOW}    - Be 3-63 characters long${NC}"
+    echo -e "${YELLOW}    - Contain only lowercase letters, numbers, and hyphens${NC}"
+    echo -e "${YELLOW}    - Start and end with a letter or number${NC}"
+    exit 1
+fi
+
+if [ ${#S3_BUCKET} -lt 3 ] || [ ${#S3_BUCKET} -gt 63 ]; then
+    echo -e "${RED}✗ Bucket name must be 3-63 characters long${NC}"
+    exit 1
+fi
+
 # Validate backup directory exists
 if [ ! -d "$BACKUP_DIR" ]; then
     echo -e "${RED}✗ Backup directory does not exist: $BACKUP_DIR${NC}"
     exit 1
 fi
 
+# Function to create and configure S3 bucket
+# Returns: 0 on success, 1 on failure
+# Sets global DETECTED_REGION if bucket exists in different region
+create_s3_bucket() {
+    local bucket_name=$1
+    local region=$2
+    
+    echo -e "${YELLOW}  Creating bucket '$bucket_name' in region '$region'...${NC}"
+    
+    # Create bucket
+    CREATE_CMD="aws s3 mb s3://$bucket_name --region $region"
+    
+    # Try to create bucket and capture output
+    CREATE_OUTPUT=$(eval "$CREATE_CMD" 2>&1)
+    CREATE_EXIT_CODE=$?
+    
+    if [ $CREATE_EXIT_CODE -ne 0 ]; then
+        # Check if bucket already exists in a different region
+        BUCKET_LOCATION_JSON=$(aws s3api get-bucket-location --bucket "$bucket_name" 2>/dev/null || echo "")
+        if [ -n "$BUCKET_LOCATION_JSON" ]; then
+            BUCKET_REGION=$(echo "$BUCKET_LOCATION_JSON" | grep -o '"LocationConstraint"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 || echo "")
+            if [ "$BUCKET_REGION" = "null" ] || [ -z "$BUCKET_REGION" ]; then
+                BUCKET_REGION="us-east-1"
+            fi
+            if [ -n "$BUCKET_REGION" ]; then
+                echo -e "${YELLOW}  ⚠️  Bucket exists in region: $BUCKET_REGION (requested: $region)${NC}"
+                if [ "$BUCKET_REGION" != "$region" ]; then
+                    echo -e "${YELLOW}  Using existing bucket in region: $BUCKET_REGION${NC}"
+                    # Set global variable for region
+                    export DETECTED_REGION="$BUCKET_REGION"
+                    return 0
+                fi
+            fi
+        fi
+        
+        # Check for common errors
+        if echo "$CREATE_OUTPUT" | grep -q "BucketAlreadyExists"; then
+            echo -e "${YELLOW}  ⚠️  Bucket name is already taken (must be globally unique)${NC}"
+            echo -e "${YELLOW}  Please choose a different bucket name${NC}"
+        elif echo "$CREATE_OUTPUT" | grep -q "AccessDenied\|Forbidden"; then
+            echo -e "${RED}  ✗ Access denied. Check IAM permissions (s3:CreateBucket)${NC}"
+        else
+            echo -e "${RED}  ✗ Failed to create bucket${NC}"
+            echo -e "${RED}    Error: $CREATE_OUTPUT${NC}"
+        fi
+        return 1
+    fi
+    
+    echo -e "${GREEN}  ✓ Bucket created${NC}"
+    
+    # Configure bucket settings
+    echo -e "${BLUE}  Configuring bucket settings...${NC}"
+    
+    # Block public access
+    aws s3api put-public-access-block \
+        --bucket "$bucket_name" \
+        --public-access-block-configuration \
+        "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" \
+        2>/dev/null && echo -e "${GREEN}    ✓ Public access blocked${NC}" || echo -e "${YELLOW}    ⚠️  Could not block public access${NC}"
+    
+    # Enable versioning
+    aws s3api put-bucket-versioning \
+        --bucket "$bucket_name" \
+        --versioning-configuration Status=Enabled \
+        2>/dev/null && echo -e "${GREEN}    ✓ Versioning enabled${NC}" || echo -e "${YELLOW}    ⚠️  Could not enable versioning${NC}"
+    
+    # Enable encryption
+    aws s3api put-bucket-encryption \
+        --bucket "$bucket_name" \
+        --server-side-encryption-configuration '{
+            "Rules": [{
+                "ApplyServerSideEncryptionByDefault": {
+                    "SSEAlgorithm": "AES256"
+                }
+            }]
+        }' \
+        2>/dev/null && echo -e "${GREEN}    ✓ Encryption enabled${NC}" || echo -e "${YELLOW}    ⚠️  Could not enable encryption${NC}"
+    
+    # Set lifecycle policy to delete old backups (optional - 90 days)
+    LIFECYCLE_POLICY='{
+        "Rules": [{
+            "Id": "DeleteOldBackups",
+            "Status": "Enabled",
+            "Prefix": "'"$S3_PREFIX"'/",
+            "Expiration": {
+                "Days": 90
+            }
+        }]
+    }'
+    
+    echo "$LIFECYCLE_POLICY" > /tmp/lifecycle-policy.json
+    aws s3api put-bucket-lifecycle-configuration \
+        --bucket "$bucket_name" \
+        --lifecycle-configuration file:///tmp/lifecycle-policy.json \
+        2>/dev/null && echo -e "${GREEN}    ✓ Lifecycle policy set (auto-delete after 90 days)${NC}" || echo -e "${YELLOW}    ⚠️  Could not set lifecycle policy${NC}"
+    rm -f /tmp/lifecycle-policy.json
+    
+    return 0
+}
+
 # Check if bucket exists and is accessible
 echo -e "${BLUE}Checking S3 bucket access...${NC}"
-if ! aws s3 ls "s3://$S3_BUCKET" &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Bucket '$S3_BUCKET' does not exist or is not accessible${NC}"
-    echo -e "${YELLOW}  Creating bucket...${NC}"
+BUCKET_EXISTS=false
+BUCKET_ACCESSIBLE=false
+
+# Try to list bucket (this checks both existence and access)
+if aws s3 ls "s3://$S3_BUCKET" &> /dev/null; then
+    BUCKET_EXISTS=true
+    BUCKET_ACCESSIBLE=true
+    echo -e "${GREEN}  ✓ Bucket exists and is accessible${NC}"
     
-    # Try to create bucket
-    if aws s3 mb "s3://$S3_BUCKET" --region "$AWS_REGION" 2>/dev/null; then
-        echo -e "${GREEN}  ✓ Bucket created${NC}"
-        
-        # Enable versioning
-        aws s3api put-bucket-versioning \
-            --bucket "$S3_BUCKET" \
-            --versioning-configuration Status=Enabled 2>/dev/null || true
-        
-        # Enable encryption
-        aws s3api put-bucket-encryption \
-            --bucket "$S3_BUCKET" \
-            --server-side-encryption-configuration '{
-                "Rules": [{
-                    "ApplyServerSideEncryptionByDefault": {
-                        "SSEAlgorithm": "AES256"
-                    }
-                }]
-            }' 2>/dev/null || true
-        
-        echo -e "${GREEN}  ✓ Bucket configured with versioning and encryption${NC}"
-    else
-        echo -e "${RED}✗ Failed to create bucket. Please create it manually or check permissions${NC}"
-        exit 1
+    # Get bucket region
+    BUCKET_LOCATION_JSON=$(aws s3api get-bucket-location --bucket "$S3_BUCKET" 2>/dev/null || echo "")
+    if [ -n "$BUCKET_LOCATION_JSON" ]; then
+        BUCKET_REGION=$(echo "$BUCKET_LOCATION_JSON" | grep -o '"LocationConstraint"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 || echo "")
+        if [ "$BUCKET_REGION" = "null" ] || [ -z "$BUCKET_REGION" ]; then
+            BUCKET_REGION="us-east-1"
+        fi
+        if [ -n "$BUCKET_REGION" ] && [ "$BUCKET_REGION" != "$AWS_REGION" ]; then
+            echo -e "${YELLOW}  ⚠️  Bucket is in region: $BUCKET_REGION (using this region)${NC}"
+            AWS_REGION="$BUCKET_REGION"
+        fi
     fi
 else
-    echo -e "${GREEN}  ✓ Bucket accessible${NC}"
+    # Bucket doesn't exist or not accessible
+    ERROR_OUTPUT=$(aws s3 ls "s3://$S3_BUCKET" 2>&1 || true)
+    
+    if echo "$ERROR_OUTPUT" | grep -q "NoSuchBucket"; then
+        echo -e "${YELLOW}  ⚠️  Bucket '$S3_BUCKET' does not exist${NC}"
+        echo -e "${YELLOW}  Creating bucket...${NC}"
+        
+        DETECTED_REGION=""
+        if create_s3_bucket "$S3_BUCKET" "$AWS_REGION"; then
+            # If bucket was found in different region, use that
+            if [ -n "$DETECTED_REGION" ]; then
+                AWS_REGION="$DETECTED_REGION"
+            fi
+            BUCKET_EXISTS=true
+            BUCKET_ACCESSIBLE=true
+        else
+            echo -e "${RED}✗ Failed to create bucket${NC}"
+            echo -e "${YELLOW}  You can create it manually with:${NC}"
+            echo -e "${BLUE}    aws s3 mb s3://$S3_BUCKET --region $AWS_REGION${NC}"
+            exit 1
+        fi
+    elif echo "$ERROR_OUTPUT" | grep -q "AccessDenied\|Forbidden"; then
+        echo -e "${RED}✗ Access denied to bucket '$S3_BUCKET'${NC}"
+        echo -e "${YELLOW}  Check your IAM permissions (s3:ListBucket, s3:GetObject, s3:PutObject)${NC}"
+        exit 1
+    else
+        echo -e "${RED}✗ Cannot access bucket '$S3_BUCKET'${NC}"
+        echo -e "${YELLOW}  Error: $ERROR_OUTPUT${NC}"
+        exit 1
+    fi
 fi
 
 # Find all backup files
