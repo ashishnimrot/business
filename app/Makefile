@@ -405,3 +405,14 @@ fix-permissions: ## Fix user permissions (usage: make fix-permissions PHONE=8625
 		bash scripts/fix-user-permissions.sh "$(PHONE)"; \
 	fi
 	@echo "$(GREEN)✅ Permissions fixed. User should log out and log back in.$(NC)"
+
+fix-prod-permissions: ## Fix ALL user permissions in production database (grants full access to all users)
+	@echo "$(BLUE)🔧 Fixing production database permissions...$(NC)"
+	@echo "$(YELLOW)This will grant full permissions to ALL users in production database$(NC)"
+	@read -p "$(YELLOW)Continue? (y/N): $(NC)" confirm; \
+	if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
+		echo "$(RED)Cancelled$(NC)"; \
+		exit 1; \
+	fi
+	@bash scripts/fix-prod-permissions.sh localhost 5432 postgres postgres
+	@echo "$(GREEN)✅ Production permissions fixed. Restart services: make restart$(NC)"
