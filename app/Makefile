@@ -235,7 +235,7 @@ start-prod: ## Start production with Docker (local testing, single command)
 	@echo ""
 	@bash scripts/deploy-prod-local.sh
 
-deploy-prod: ## Deploy latest code to production (EC2/Production)
+deploy-prod: ## Deploy latest code to production (EC2/Production) - uses existing Docker DB
 	@echo "$(BLUE)╔════════════════════════════════════════════════════════════╗$(NC)"
 	@echo "$(BLUE)║     PRODUCTION DEPLOYMENT - EC2/PRODUCTION                  ║$(NC)"
 	@echo "$(BLUE)╚════════════════════════════════════════════════════════════╝$(NC)"
@@ -244,29 +244,25 @@ deploy-prod: ## Deploy latest code to production (EC2/Production)
 	@echo "  ✅ Pull latest code from git"
 	@echo "  ✅ Stop existing services"
 	@echo "  ✅ Start infrastructure (PostgreSQL & Redis)"
-	@echo "  ✅ Initialize databases"
+	@echo "  ✅ Use existing databases (no new DBs created)"
 	@echo "  ✅ Create database backup (MANDATORY)"
 	@echo "  ✅ Run safe, idempotent migrations (won't affect existing data)"
 	@echo "  ✅ Build Docker images"
 	@echo "  ✅ Start all services in production mode"
 	@echo "  ✅ Verify health"
 	@echo ""
-	@read -p "$(YELLOW)Database Host (default: localhost): $(NC)" DB_HOST; \
-	DB_HOST=$${DB_HOST:-localhost}; \
-	read -p "$(YELLOW)Database Port (default: 5432): $(NC)" DB_PORT; \
-	DB_PORT=$${DB_PORT:-5432}; \
-	read -p "$(YELLOW)Database User (default: postgres): $(NC)" DB_USER; \
-	DB_USER=$${DB_USER:-postgres}; \
-	read -sp "$(YELLOW)Database Password: $(NC)" DB_PASSWORD; \
-	echo ""; \
-	read -sp "$(YELLOW)JWT Secret (press Enter to auto-generate): $(NC)" JWT_SECRET; \
+	@echo "$(BLUE)Note: Using existing Docker database (password: postgres)${NC}"
+	@echo "$(BLUE)Only new migrations will be applied to existing databases${NC}"
+	@echo ""
+	@read -sp "$(YELLOW)JWT Secret (press Enter to auto-generate): $(NC)" JWT_SECRET; \
 	echo ""; \
 	echo ""; \
-	bash scripts/deploy-prod-ec2.sh $$DB_HOST $$DB_PORT $$DB_USER $$DB_PASSWORD $$JWT_SECRET
+	bash scripts/deploy-prod-ec2.sh localhost 5432 postgres postgres $$JWT_SECRET
 
-deploy-prod-quick: ## Quick production deploy with defaults (no prompts)
-	@echo "$(BLUE)🚀 Quick Production Deployment (using environment variables)${NC}"
-	@bash scripts/deploy-prod-ec2.sh localhost 5432 postgres $${DB_PASSWORD:-postgres} $${JWT_SECRET:-}
+deploy-prod-quick: ## Quick production deploy - uses existing Docker DB (no prompts)
+	@echo "$(BLUE)🚀 Quick Production Deployment (using existing Docker DB)${NC}"
+	@echo "$(YELLOW)Using: DB=localhost:5432, User=postgres, Password=postgres (Docker default)${NC}"
+	@bash scripts/deploy-prod-ec2.sh localhost 5432 postgres postgres
 
 start-prod-quick: start-prod ## Alias for start-prod
 

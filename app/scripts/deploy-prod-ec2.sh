@@ -21,19 +21,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Database connection parameters
+# Database connection parameters (using existing Docker DB credentials)
 DB_HOST="${1:-${DB_HOST:-localhost}}"
 DB_PORT="${2:-${DB_PORT:-5432}}"
 DB_USER="${3:-${DB_USER:-postgres}}"
-DB_PASSWORD="${4:-${DB_PASSWORD}}"
+# Use existing Docker database password (default: postgres, or from environment)
+DB_PASSWORD="${4:-${DB_PASSWORD:-postgres}}"
 JWT_SECRET="${5:-${JWT_SECRET}}"
-
-# Validate required parameters
-if [ -z "$DB_PASSWORD" ]; then
-    echo -e "${RED}✗ Error: DB_PASSWORD is required${NC}"
-    echo "Usage: $0 [DB_HOST] [DB_PORT] [DB_USER] [DB_PASSWORD] [JWT_SECRET]"
-    exit 1
-fi
 
 # Generate JWT_SECRET if not provided
 if [ -z "$JWT_SECRET" ]; then
@@ -57,7 +51,11 @@ echo -e "${YELLOW}Configuration:${NC}"
 echo "  • DB Host: $DB_HOST"
 echo "  • DB Port: $DB_PORT"
 echo "  • DB User: $DB_USER"
+echo "  • Using existing Docker database (password from Docker config)"
 echo "  • JWT Secret: ${JWT_SECRET:0:10}... (hidden)"
+echo ""
+echo -e "${BLUE}Note: Using existing database - no new databases will be created${NC}"
+echo -e "${BLUE}Only new migrations will be applied to existing databases${NC}"
 echo ""
 
 # Check prerequisites
@@ -166,13 +164,25 @@ fi
 echo -e "${GREEN}✓ Infrastructure services started${NC}"
 echo ""
 
-# Step 4: Initialize databases (if needed)
-echo -e "${YELLOW}Step 4/9: Initializing databases...${NC}"
-echo -e "${BLUE}  → Ensuring databases exist...${NC}"
-docker exec -i business-postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname='auth_db'" | grep -q 1 || \
-    docker exec -i business-postgres psql -U postgres -f /docker-entrypoint-initdb.d/init-db.sql 2>/dev/null || \
-    (echo -e "${YELLOW}    ⚠️  Database initialization skipped (may already exist)${NC}" && sleep 1)
-echo -e "${GREEN}✓ Databases initialized${NC}"
+# Step 4: Verify existing databases
+echo -e "${YELLOW}Step 4/9: Verifying existing databases...${NC}"
+echo -e "${BLUE}  → Checking existing databases...${NC}"
+
+# Check if databases exist
+AUTH_DB_EXISTS=$(docker exec business-postgres psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='auth_db'" 2>/dev/null || echo "0")
+BUSINESS_DB_EXISTS=$(docker exec business-postgres psql -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='business_db'" 2>/dev/null || echo "0")
+
+if [ "$AUTH_DB_EXISTS" = "1" ] && [ "$BUSINESS_DB_EXISTS" = "1" ]; then
+    echo -e "${GREEN}    ✓ Existing databases found (auth_db, business_db)${NC}"
+    echo -e "${BLUE}    → Using existing databases - no new databases will be created${NC}"
+else
+    echo -e "${YELLOW}    ⚠️  Some databases may not exist, initializing if needed...${NC}"
+    docker exec -i business-postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname='auth_db'" | grep -q 1 || \
+        docker exec -i business-postgres psql -U postgres -f /docker-entrypoint-initdb.d/init-db.sql 2>/dev/null || \
+        (echo -e "${YELLOW}    ⚠️  Database initialization skipped${NC}" && sleep 1)
+fi
+
+echo -e "${GREEN}✓ Databases verified${NC}"
 echo ""
 
 # Step 5: Backup existing data (MANDATORY)
