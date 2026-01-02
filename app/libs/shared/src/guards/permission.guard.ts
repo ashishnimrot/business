@@ -52,7 +52,16 @@ export class PermissionGuard implements CanActivate {
     // Check if user has required permission
     const hasPermission = businessContext.permissions.includes(requiredPermission);
 
+    // Debug: Log permission check details
     if (!hasPermission) {
+      console.error(`[PermissionGuard] Permission denied:`, {
+        requiredPermission,
+        userId: businessContext.userId,
+        businessId: businessContext.businessId,
+        permissionsCount: businessContext.permissions.length,
+        permissions: businessContext.permissions.slice(0, 10), // First 10 for debugging
+        hasRequired: businessContext.permissions.includes(requiredPermission),
+      });
       throw new ForbiddenException(
         `You do not have permission: ${requiredPermission}`
       );

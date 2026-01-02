@@ -64,6 +64,15 @@ export class CrossServiceBusinessContextGuard implements CanActivate {
     // TODO: In production, call business-service API to resolve actual permissions
     const ownerPermissions = calculateEffectivePermissions(Role.OWNER, null);
     
+    // Debug: Log permissions to verify they're being set
+    console.log(`[CrossServiceBusinessContextGuard] Setting permissions for user ${user.id}, business ${businessId}:`, {
+      permissionsCount: ownerPermissions.length,
+      hasInventoryRead: ownerPermissions.includes(Permission.INVENTORY_READ),
+      hasInvoiceRead: ownerPermissions.includes(Permission.INVOICE_READ),
+      hasPartyRead: ownerPermissions.includes(Permission.PARTY_READ),
+      hasPaymentRead: ownerPermissions.includes(Permission.PAYMENT_READ),
+    });
+    
     request.businessContext = {
       businessId,
       userId: user.id,
