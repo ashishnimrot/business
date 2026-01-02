@@ -257,21 +257,81 @@ fi
 echo -e "${GREEN}✓ Migrations complete${NC}"
 echo ""
 
-# Step 7: Build Docker images
+# Step 7: Build Docker images (sequentially to avoid network issues)
 echo -e "${YELLOW}Step 7/9: Building Docker images...${NC}"
+echo -e "${BLUE}  → Building services one by one (to avoid network issues)...${NC}"
 echo -e "${BLUE}  → This may take several minutes...${NC}"
 cd "$PROJECT_ROOT"
 
-echo -e "${BLUE}  → Building all services...${NC}"
-$DOCKER_COMPOSE -f docker-compose.prod.yml build 2>&1 | tee /tmp/docker-build.log | grep -E "(Step|Building|Successfully|ERROR|error|built)" || true
+# Build services sequentially to avoid network connection issues
+SERVICES=("auth-service" "business-service" "party-service" "inventory-service" "invoice-service" "payment-service" "web-app")
 
-# Check if build was successful
-if grep -q "ERROR\|error" /tmp/docker-build.log 2>/dev/null; then
-    echo -e "${YELLOW}  ⚠️  Some build warnings detected, but continuing...${NC}"
+BUILD_SUCCESS=0
+BUILD_FAILED=0
+
+build_service() {
+    local service=$1
+    local attempt=${2:-1}
+    local max_attempts=3
+    
+    echo -e "${BLUE}  → Building $service (attempt $attempt/$max_attempts)...${NC}"
+    
+    # Build service and capture output
+    if $DOCKER_COMPOSE -f docker-compose.prod.yml build "$service" > /tmp/docker-build-${service}-${attempt}.log 2>&1; then
+        # Check if build actually succeeded (look for success indicators)
+        if grep -qiE "Successfully|built|tagged" /tmp/docker-build-${service}-${attempt}.log; then
+            echo -e "${GREEN}    ✓ $service built successfully${NC}"
+            rm -f /tmp/docker-build-${service}-*.log 2>/dev/null
+            return 0
+        fi
+    fi
+    
+    # Check for network errors
+    if grep -qiE "ECONNRESET|network|socket|timeout|connection" /tmp/docker-build-${service}-${attempt}.log; then
+        echo -e "${YELLOW}    ⚠️  Network error detected${NC}"
+        if [ $attempt -lt $max_attempts ]; then
+            echo -e "${YELLOW}    → Retrying $service in 10 seconds...${NC}"
+            sleep 10
+            build_service "$service" $((attempt + 1))
+            return $?
+        else
+            echo -e "${RED}    ✗ $service build failed after $max_attempts attempts (network issues)${NC}"
+            return 1
+        fi
+    else
+        # Other errors
+        if [ $attempt -lt $max_attempts ]; then
+            echo -e "${YELLOW}    ⚠️  Build error, retrying in 5 seconds...${NC}"
+            sleep 5
+            build_service "$service" $((attempt + 1))
+            return $?
+        else
+            echo -e "${RED}    ✗ $service build failed after $max_attempts attempts${NC}"
+            echo -e "${YELLOW}    → Last error:${NC}"
+            tail -5 /tmp/docker-build-${service}-${attempt}.log 2>/dev/null | head -3
+            return 1
+        fi
+    fi
+}
+
+for service in "${SERVICES[@]}"; do
+    if build_service "$service"; then
+        ((BUILD_SUCCESS++))
+    else
+        ((BUILD_FAILED++))
+    fi
+    echo ""
+done
+
+# Cleanup log files
+rm -f /tmp/docker-build-*.log 2>/dev/null
+
+if [ $BUILD_FAILED -gt 0 ]; then
+    echo -e "${YELLOW}  ⚠️  $BUILD_FAILED service(s) failed to build${NC}"
+    echo -e "${YELLOW}  → Continuing with successfully built services...${NC}"
+else
+    echo -e "${GREEN}✓ All Docker images built successfully${NC}"
 fi
-
-echo -e "${GREEN}✓ Docker images built${NC}"
-rm -f /tmp/docker-build.log
 echo ""
 
 # Step 8: Start all application services
