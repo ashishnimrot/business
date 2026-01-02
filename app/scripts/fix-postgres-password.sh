@@ -35,41 +35,61 @@ fi
 echo -e "${YELLOW}Resetting PostgreSQL password to: ${EXPECTED_PASSWORD}${NC}"
 echo ""
 
-# Method 1: Try to connect and reset password using ALTER USER
-echo -e "${BLUE}  → Attempting to reset password...${NC}"
+# Method 1: Try to connect using docker exec (may work with trust auth for local connections)
+echo -e "${BLUE}  → Attempting to reset password using docker exec...${NC}"
 
-# Try common passwords to connect
-COMMON_PASSWORDS=("postgres" "password" "admin" "")
+# Try connecting without password first (trust authentication might work for local connections)
+if docker exec business-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '$EXPECTED_PASSWORD';" 2>/dev/null; then
+    echo -e "${GREEN}    ✓ Password reset successful (using trust auth)${NC}"
+    RESET_SUCCESS=true
+else
+    # Method 2: Try common passwords
+    echo -e "${BLUE}  → Trying common passwords...${NC}"
+    COMMON_PASSWORDS=("postgres" "password" "admin" "")
 
-RESET_SUCCESS=false
-for try_password in "${COMMON_PASSWORDS[@]}"; do
-    echo -e "${BLUE}    → Trying password: ${try_password:-'(empty)'}${NC}"
-    
-    # Try to connect and reset password
-    if docker exec -e PGPASSWORD="$try_password" business-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '$EXPECTED_PASSWORD';" 2>/dev/null; then
-        echo -e "${GREEN}    ✓ Password reset successful${NC}"
-        RESET_SUCCESS=true
-        break
-    fi
-done
+    RESET_SUCCESS=false
+    for try_password in "${COMMON_PASSWORDS[@]}"; do
+        echo -e "${BLUE}    → Trying password: ${try_password:-'(empty)'}${NC}"
+        
+        # Try to connect and reset password
+        if docker exec -e PGPASSWORD="$try_password" business-postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD '$EXPECTED_PASSWORD';" 2>/dev/null; then
+            echo -e "${GREEN}    ✓ Password reset successful${NC}"
+            RESET_SUCCESS=true
+            break
+        fi
+    done
+fi
 
 if [ "$RESET_SUCCESS" = false ]; then
     echo -e "${YELLOW}  ⚠️  Could not reset password automatically${NC}"
-    echo -e "${YELLOW}  → You may need to manually reset the password${NC}"
+    echo -e "${YELLOW}  → Trying alternative method: using su to become postgres user...${NC}"
+    
+    # Method 3: Use su to become postgres user inside container (bypasses password)
+    if docker exec business-postgres sh -c "su - postgres -c \"psql -c \\\"ALTER USER postgres WITH PASSWORD '$EXPECTED_PASSWORD';\\\"\"" 2>/dev/null; then
+        echo -e "${GREEN}    ✓ Password reset successful (using su method)${NC}"
+        RESET_SUCCESS=true
+    fi
+fi
+
+if [ "$RESET_SUCCESS" = false ]; then
+    echo -e "${RED}  ✗ All automatic methods failed${NC}"
     echo ""
-    echo -e "${BLUE}Manual steps:${NC}"
-    echo "  1. Connect to PostgreSQL container:"
-    echo "     ${YELLOW}docker exec -it business-postgres psql -U postgres${NC}"
+    echo -e "${YELLOW}Manual fix required. Try one of these methods:${NC}"
     echo ""
-    echo "  2. Run this SQL command:"
-    echo "     ${YELLOW}ALTER USER postgres WITH PASSWORD 'postgres';${NC}"
+    echo -e "${BLUE}Method 1: Direct SQL (if trust auth works):${NC}"
+    echo "  ${YELLOW}docker exec -it business-postgres psql -U postgres${NC}"
+    echo "  ${YELLOW}ALTER USER postgres WITH PASSWORD 'postgres';${NC}"
     echo ""
-    echo "  3. Or restart PostgreSQL with the correct password:"
-    echo "     ${YELLOW}docker-compose -f docker-compose.prod.yml down postgres${NC}"
-    echo "     ${YELLOW}docker volume rm app_postgres_data${NC}"
-    echo "     ${YELLOW}docker-compose -f docker-compose.prod.yml up -d postgres${NC}"
+    echo -e "${BLUE}Method 2: Using su (bypasses password):${NC}"
+    echo "  ${YELLOW}docker exec -it business-postgres sh${NC}"
+    echo "  ${YELLOW}su - postgres${NC}"
+    echo "  ${YELLOW}psql -c \"ALTER USER postgres WITH PASSWORD 'postgres';\"${NC}"
     echo ""
-    echo -e "${YELLOW}  ⚠️  Note: Removing the volume will delete all data!${NC}"
+    echo -e "${BLUE}Method 3: Temporarily modify pg_hba.conf (advanced):${NC}"
+    echo "  ${YELLOW}docker exec -it business-postgres sh -c \"echo 'host all all 0.0.0.0/0 trust' >> /var/lib/postgresql/data/pg_hba.conf\"${NC}"
+    echo "  ${YELLOW}docker restart business-postgres${NC}"
+    echo "  ${YELLOW}docker exec business-postgres psql -U postgres -c \"ALTER USER postgres WITH PASSWORD 'postgres';\"${NC}"
+    echo ""
     exit 1
 fi
 

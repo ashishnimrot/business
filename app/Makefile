@@ -377,3 +377,9 @@ ti: test-integration ## Alias for test-integration
 te: test-e2e ## Alias for test-e2e
 t360: test-360 ## Alias for test-360
 h: health ## Alias for health
+
+status: ## Check status of all services
+	@echo "$(BLUE)🔍 Checking service status...$(NC)"
+	@bash scripts/check-services.sh
+
+check: status ## Alias for status
