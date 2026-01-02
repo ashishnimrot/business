@@ -28,7 +28,7 @@ export class AuditLogController {
    */
   @Get('businesses/:businessId/audit-logs')
   @UseGuards(BusinessContextGuard, PermissionGuard)
-  @RequirePermission(Permission.REPORT_VIEW)
+  @RequirePermission(Permission.AUDIT_LOGS_VIEW)
   @ApiOperation({ summary: 'Get audit logs for a business' })
   @ApiQuery({ name: 'action', required: false, description: 'Filter by action type' })
   @ApiQuery({ name: 'userId', required: false, description: 'Filter by user ID who performed action' })
@@ -91,7 +91,7 @@ export class AuditLogController {
    */
   @Get('users/:userId/audit-logs')
   @UseGuards(PermissionGuard)
-  @RequirePermission(Permission.REPORT_VIEW)
+  @RequirePermission(Permission.AUDIT_LOGS_VIEW)
   @ApiOperation({ summary: 'Get audit logs for a user' })
   @ApiQuery({ name: 'businessId', required: false, description: 'Filter by business ID' })
   @ApiQuery({ name: 'action', required: false, description: 'Filter by action type' })

@@ -8,11 +8,11 @@ import { Role } from '@business-app/shared/constants';
  */
 export class AssignUserToBusinessDto {
   @ApiProperty({
-    description: 'User ID to assign to business',
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    description: 'Phone number of user to assign to business (10 digits)',
+    example: '9876543210',
   })
-  @IsUUID()
-  userId: string;
+  @IsString()
+  phone: string;
 
   @ApiProperty({
     description: 'Role to assign to user',

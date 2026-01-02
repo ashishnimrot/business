@@ -4,6 +4,8 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosInstance } from 'axios';
 import { BusinessUserRepository } from '../repositories/business-user.repository';
 import { BusinessRepository } from '../repositories/business.repository';
 import { AuditService } from './audit.service';
@@ -19,11 +21,84 @@ import { Request } from 'express';
  */
 @Injectable()
 export class BusinessUserService {
+  private readonly httpClient: AxiosInstance;
+
   constructor(
     private readonly businessUserRepository: BusinessUserRepository,
     private readonly businessRepository: BusinessRepository,
-    private readonly auditService: AuditService
-  ) {}
+    private readonly auditService: AuditService,
+    private readonly configService: ConfigService
+  ) {
+    this.httpClient = axios.create({
+      timeout: 10000,
+    });
+  }
+
+  /**
+   * Get user ID by phone number (calls auth-service)
+   */
+  private async getUserIdByPhone(phone: string, authToken?: string): Promise<string> {
+    const authServiceUrl = this.configService.get<string>('AUTH_SERVICE_URL', 'http://localhost:3002');
+    
+    try {
+      const headers: any = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const response = await this.httpClient.get(
+        `${authServiceUrl}/api/v1/users/search?q=${encodeURIComponent(phone)}`,
+        { headers }
+      );
+
+      const users = response.data || [];
+      const user = users.find((u: any) => u.phone === phone);
+      
+      if (!user) {
+        throw new NotFoundException(`User with phone number ${phone} not found`);
+      }
+
+      return user.id;
+    } catch (error: any) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          throw new NotFoundException(`User with phone number ${phone} not found. Please ensure the user has registered.`);
+        }
+        throw new BadRequestException(`Failed to lookup user by phone: ${error.response?.data?.message || error.message}`);
+      }
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(`Failed to lookup user by phone: ${error.message}`);
+    }
+  }
+
+  /**
+   * Assign user to business by phone number
+   * Default: permissions = null (full role permissions)
+   */
+  async assignUserToBusinessByPhone(
+    businessId: string,
+    phone: string,
+    role: Role,
+    assignedBy: string,
+    request?: Request
+  ): Promise<BusinessUser> {
+    // Validate phone format (10 digits)
+    if (!phone || !/^\d{10}$/.test(phone)) {
+      throw new BadRequestException('Invalid phone number. Must be 10 digits.');
+    }
+
+    // Get user ID by phone
+    const authToken = request?.headers?.authorization?.replace('Bearer ', '') || '';
+    const userId = await this.getUserIdByPhone(phone, authToken);
+
+    // Use existing assignUserToBusiness method
+    return this.assignUserToBusiness(businessId, userId, role, assignedBy, request);
+  }
 
   /**
    * Assign user to business

@@ -68,6 +68,9 @@ export enum Permission {
   REPORT_GST = 'report:gst',
   REPORT_EXPORT = 'report:export',
   REPORT_FINANCIAL = 'report:financial',
+
+  // Audit Logs
+  AUDIT_LOGS_VIEW = 'audit:view',
 }
 
 /**
@@ -125,6 +128,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.REPORT_GST,
     Permission.REPORT_EXPORT,
     Permission.REPORT_FINANCIAL,
+
+    // Audit Logs
+    Permission.AUDIT_LOGS_VIEW,
   ],
 
   [Role.ADMIN]: [
@@ -170,6 +176,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.REPORT_GST,
     Permission.REPORT_EXPORT,
     Permission.REPORT_FINANCIAL,
+
+    // Audit Logs
+    Permission.AUDIT_LOGS_VIEW,
   ],
 
   [Role.EMPLOYEE]: [

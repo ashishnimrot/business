@@ -47,7 +47,7 @@ interface UserSearchResult {
 interface UserSearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (userId: string, role: Role) => void;
+  onSelect: (phone: string, role: Role) => void;
   isLoading?: boolean;
   excludeUserIds?: string[]; // Users already in business
 }
@@ -99,7 +99,8 @@ export function UserSearchDialog({
       toast.error('Please select a user');
       return;
     }
-    onSelect(selectedUser.id, role);
+    // Use phone number instead of user ID
+    onSelect(selectedUser.phone, role);
     setSelectedUser(null);
     setSearchQuery('');
     setRole(Role.EMPLOYEE);

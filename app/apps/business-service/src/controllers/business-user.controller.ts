@@ -39,17 +39,18 @@ export class BusinessUserController {
   @Post()
   @UseGuards(PermissionGuard)
   @RequirePermission(Permission.USER_ASSIGN)
-  @ApiOperation({ summary: 'Assign user to business' })
+  @ApiOperation({ summary: 'Assign user to business by phone number' })
   @ApiResponse({ status: 201, description: 'User assigned successfully', type: BusinessUserResponseDto })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async assignUser(
     @Param('businessId') businessId: string,
     @Body() dto: AssignUserToBusinessDto,
     @Request() req: any
   ): Promise<BusinessUserResponseDto> {
-    const businessUser = await this.businessUserService.assignUserToBusiness(
+    const businessUser = await this.businessUserService.assignUserToBusinessByPhone(
       businessId,
-      dto.userId,
+      dto.phone,
       dto.role,
       req.user.id,
       req

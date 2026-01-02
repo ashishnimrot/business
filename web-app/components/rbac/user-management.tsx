@@ -104,10 +104,10 @@ export function UserManagement({ businessId }: UserManagementProps) {
     return userDetailsQueries.data?.[userId] || null;
   };
 
-  // Assign user mutation
+  // Assign user mutation (now uses phone number)
   const assignMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: Role }) =>
-      assignUserToBusiness(businessId, userId, role),
+    mutationFn: ({ phone, role }: { phone: string; role: Role }) =>
+      assignUserToBusiness(businessId, phone, role),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['business-users', businessId] });
       setAssignDialogOpen(false);
@@ -192,8 +192,8 @@ export function UserManagement({ businessId }: UserManagementProps) {
     },
   });
 
-  const handleAssignUser = (userId: string, selectedRole: Role) => {
-    assignMutation.mutate({ userId, role: selectedRole });
+  const handleAssignUser = (phone: string, selectedRole: Role) => {
+    assignMutation.mutate({ phone, role: selectedRole });
   };
 
   const handleUpdateRole = () => {

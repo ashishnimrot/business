@@ -111,15 +111,15 @@ export async function getBusinessUsers(businessId: string): Promise<BusinessUser
 }
 
 /**
- * Assign a user to a business with a role
+ * Assign a user to a business with a role (by phone number)
  */
 export async function assignUserToBusiness(
   businessId: string,
-  userId: string,
+  phone: string,
   role: Role
 ): Promise<BusinessUser> {
   const response = await businessApi.post(`/businesses/${businessId}/users`, {
-    userId,
+    phone,
     role,
   });
   return response.data;

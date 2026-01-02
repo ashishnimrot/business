@@ -151,6 +151,8 @@ export class PaymentController {
   }
 
   @Get('invoices/:invoiceId')
+  @UseGuards(PermissionGuard)
+  @RequirePermission(Permission.PAYMENT_READ)
   @ApiOperation({ summary: 'Get payments for invoice' })
   @ApiResponse({
     status: 200,
@@ -158,6 +160,7 @@ export class PaymentController {
     type: [PaymentResponseDto],
   })
   @ApiResponse({ status: 400, description: 'Invalid UUID format' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async findByInvoice(
     @Param('invoiceId') invoiceId: string
   ): Promise<PaymentResponseDto[]> {

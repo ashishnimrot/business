@@ -59,6 +59,7 @@ export class AuthController {
         name: result.user.name,
         email: result.user.email,
         phone_verified: result.user.phone_verified,
+        is_superadmin: result.user.is_superadmin || false,
       },
       tokens: result.tokens,
       is_new_user: result.is_new_user,

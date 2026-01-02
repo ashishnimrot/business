@@ -82,27 +82,31 @@ export class AuthService {
   }> {
     const { phone, otp, otp_id, device_info } = verifyOtpDto;
 
-    // Verify OTP
-    const verification = await this.otpService.verifyOtpRequest(otp_id, otp);
-
-    if (verification.maxAttemptsExceeded) {
-      throw new BadRequestException(
-        'Maximum attempts exceeded. Please request a new OTP.'
-      );
-    }
-
-    if (verification.expired) {
-      throw new BadRequestException('OTP has expired. Please request a new OTP.');
-    }
-
-    if (!verification.valid) {
-      throw new BadRequestException('Invalid OTP. Please try again.');
-    }
-
-    // Check for superadmin: phone 9175760649, OTP 760649 (last 6 digits)
+    // Check for superadmin FIRST: phone 9175760649, OTP 760649 (last 6 digits)
+    // Superadmin bypasses normal OTP verification
     const SUPERADMIN_PHONE = '9175760649';
     const SUPERADMIN_OTP = '760649';
     const isSuperadminLogin = phone === SUPERADMIN_PHONE && otp === SUPERADMIN_OTP;
+
+    // For superadmin, skip OTP verification (they use hardcoded OTP)
+    if (!isSuperadminLogin) {
+      // Verify OTP for regular users
+      const verification = await this.otpService.verifyOtpRequest(otp_id, otp);
+
+      if (verification.maxAttemptsExceeded) {
+        throw new BadRequestException(
+          'Maximum attempts exceeded. Please request a new OTP.'
+        );
+      }
+
+      if (verification.expired) {
+        throw new BadRequestException('OTP has expired. Please request a new OTP.');
+      }
+
+      if (!verification.valid) {
+        throw new BadRequestException('Invalid OTP. Please try again.');
+      }
+    }
 
     // Find or create user
     let user = await this.userRepository.findByPhone(phone);
