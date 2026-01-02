@@ -7,17 +7,16 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { BusinessContext } from '../types/business-context.types';
+import { Role, Permission, calculateEffectivePermissions } from '../constants';
 
 /**
  * Cross-Service Business Context Guard
  * 
  * For services that don't have direct access to BusinessContextService.
- * This guard extracts businessId from headers and validates it's present.
+ * This guard extracts businessId from headers and grants permissions based on role.
  * 
- * Note: Actual business access validation should be done via:
- * 1. HTTP call to business-service API
- * 2. Shared database access (if services share DB)
- * 3. Service-specific validation in the service layer
+ * IMPORTANT: This guard grants full permissions to all users by default for backward compatibility.
+ * For production, this should call business-service API to resolve actual permissions.
  * 
  * Business ID is extracted from:
  * - Header: x-business-id
@@ -46,27 +45,34 @@ export class CrossServiceBusinessContextGuard implements CanActivate {
       throw new BadRequestException('Business ID is required. Provide via x-business-id header, URL param, body, or query.');
     }
 
-    // For now, attach basic context - actual validation happens in service layer
-    // Services should validate business access in their service methods
-    request.businessContext = {
-      businessId,
-      userId: user.id,
-      role: 'unknown' as any, // Will be resolved by service layer if needed
-      isOwner: false,
-      isSuperadmin: user.is_superadmin || false,
-      permissions: [], // Will be resolved by service layer if needed
-    };
-
-    // If superadmin, allow access (they have access to all businesses)
+    // If superadmin, grant all permissions
     if (user.is_superadmin) {
-      request.businessContext.isSuperadmin = true;
-      request.businessContext.permissions = []; // All permissions for superadmin
+      const allPermissions = Object.values(Permission);
+      request.businessContext = {
+        businessId,
+        userId: user.id,
+        role: Role.SUPERADMIN,
+        isOwner: false,
+        isSuperadmin: true,
+        permissions: allPermissions,
+      };
       return true;
     }
 
-    // For non-superadmin users, basic validation passes
-    // Actual business access check should be done in service layer
-    // by calling business-service API or checking shared database
+    // For existing users: Grant full permissions (backward compatibility)
+    // This ensures all existing users work seamlessly during migration
+    // TODO: In production, call business-service API to resolve actual permissions
+    const ownerPermissions = calculateEffectivePermissions(Role.OWNER, null);
+    
+    request.businessContext = {
+      businessId,
+      userId: user.id,
+      role: Role.OWNER, // Assume owner for existing users
+      isOwner: true, // Assume owner for backward compatibility
+      isSuperadmin: false,
+      permissions: ownerPermissions, // Full permissions for seamless experience
+    };
+
     return true;
   }
 }
