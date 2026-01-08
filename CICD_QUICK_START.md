@@ -102,3 +102,4 @@ ssh -i ~/.ssh/business-app-key.pem ec2-user@<PUBLIC_IP> \
 
 See `docs/CICD_PIPELINE.md` for complete documentation including troubleshooting, best practices, and advanced configuration.
 
+

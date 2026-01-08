@@ -70,22 +70,47 @@ export default function EditPartyPage() {
         gstin: party.gstin || '',
         phone: party.phone || party.mobile || '',
         email: party.email || '',
-        address: party.address || '',
-        city: party.city || '',
-        state: party.state || '',
-        pincode: party.pincode || '',
+        // Map backend billing fields to form fields
+        address: party.billing_address_line1 || party.address || '',
+        city: party.billing_city || party.city || '',
+        state: party.billing_state || party.state || '',
+        pincode: party.billing_pincode || party.pincode || '',
         opening_balance: String(party.opening_balance || 0),
-        balance_type: party.balance_type || 'receivable',
+        // Convert backend opening_balance_type to form balance_type
+        balance_type: party.opening_balance_type === 'credit' ? 'payable' : 'receivable',
       });
     }
   }, [party]);
 
   const updatePartyMutation = useMutation({
     mutationFn: async (data: PartyFormData) => {
-      const response = await partyApi.put(`/parties/${partyId}`, {
-        ...data,
-        opening_balance: parseFloat(data.opening_balance) || 0,
-      });
+      // Build a clean payload with correct field names matching backend DTO
+      const payload: any = {
+        name: data.name,
+        type: data.type,
+      };
+
+      // Only include optional fields if they have values (no empty strings)
+      if (data.gstin) payload.gstin = data.gstin;
+      if (data.phone) payload.phone = data.phone;
+      if (data.email) payload.email = data.email;
+      
+      // Map address fields to billing_address fields
+      if (data.address) payload.billing_address_line1 = data.address;
+      if (data.city) payload.billing_city = data.city;
+      if (data.state) payload.billing_state = data.state;
+      if (data.pincode) payload.billing_pincode = data.pincode;
+      
+      // Map balance_type to opening_balance_type and convert values
+      // receivable (they owe you) = debit balance
+      // payable (you owe them) = credit balance
+      const balanceAmount = parseFloat(data.opening_balance) || 0;
+      if (balanceAmount !== 0) {
+        payload.opening_balance = balanceAmount;
+        payload.opening_balance_type = data.balance_type === 'receivable' ? 'debit' : 'credit';
+      }
+
+      const response = await partyApi.put(`/parties/${partyId}`, payload);
       return response.data;
     },
     onSuccess: () => {
@@ -95,7 +120,11 @@ export default function EditPartyPage() {
       router.push(`/parties/${partyId}`);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update party');
+      // Handle array of error messages from backend validation
+      const errorMessage = Array.isArray(error.response?.data?.message) 
+        ? error.response.data.message.join(', ')
+        : error.response?.data?.message || 'Failed to update party';
+      toast.error(errorMessage);
     },
   });
 

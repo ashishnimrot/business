@@ -274,3 +274,4 @@ echo "   View logs: ssh -i $SSH_KEY_FILE ec2-user@$PUBLIC_IP 'cd /opt/business-a
 echo "   Restart service: ssh -i $SSH_KEY_FILE ec2-user@$PUBLIC_IP 'cd /opt/business-app/app && docker-compose -f docker-compose.prod.yml restart <service-name>'"
 echo ""
 
+

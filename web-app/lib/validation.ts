@@ -72,3 +72,4 @@ export function validateQueryUUID(uuid: string | null | undefined, allowNew: boo
   return uuid;
 }
 
+

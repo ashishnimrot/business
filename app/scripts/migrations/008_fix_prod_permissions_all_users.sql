@@ -116,3 +116,4 @@ BEGIN
     RAISE NOTICE 'All existing users now have full permissions for seamless experience';
 END $$;
 
+

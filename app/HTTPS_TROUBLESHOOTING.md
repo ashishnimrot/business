@@ -140,3 +140,4 @@ After fixes, test:
 2. **From EC2**: `curl -I https://samriddhi.buzz`
 3. **Check SSL**: `https://www.ssllabs.com/ssltest/analyze.html?d=samriddhi.buzz`
 
+

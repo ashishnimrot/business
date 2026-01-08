@@ -74,3 +74,4 @@ END $$;
 \c postgres;
 SELECT 'Cleanup complete! All mock data has been removed.' AS message;
 
+

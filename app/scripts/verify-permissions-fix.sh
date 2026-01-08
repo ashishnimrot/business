@@ -89,3 +89,4 @@ echo "  3. Check logs:"
 echo "     ${BLUE}docker logs business-inventory-service --tail 100${NC}"
 echo ""
 
+

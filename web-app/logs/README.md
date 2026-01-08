@@ -82,3 +82,4 @@ To disable file logging, set `NODE_ENV=production` or run on a non-localhost dom
 - If file writing fails, the app continues normally (errors are logged to console)
 - Sensitive data (like Authorization headers) is automatically redacted
 
+

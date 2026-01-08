@@ -52,11 +52,35 @@ export default function NewPartyPage() {
 
   const createPartyMutation = useMutation({
     mutationFn: async (data: PartyFormData) => {
-      const response = await partyApi.post('/parties', {
-        ...data,
-        business_id: businessId,
-        opening_balance: parseFloat(data.opening_balance) || 0,
-      });
+      // Build a clean payload with correct field names matching backend DTO
+      const payload: any = {
+        name: data.name,
+        type: data.type,
+      };
+
+      // Only include optional fields if they have values (no empty strings)
+      if (data.gstin) payload.gstin = data.gstin;
+      if (data.phone) payload.phone = data.phone;
+      if (data.email) payload.email = data.email;
+      
+      // Map address fields to billing_address fields
+      if (data.address) payload.billing_address_line1 = data.address;
+      if (data.city) payload.billing_city = data.city;
+      if (data.state) payload.billing_state = data.state;
+      if (data.pincode) payload.billing_pincode = data.pincode;
+      
+      // Map balance_type to opening_balance_type and convert values
+      // receivable (they owe you) = debit balance
+      // payable (you owe them) = credit balance
+      const balanceAmount = parseFloat(data.opening_balance) || 0;
+      if (balanceAmount !== 0) {
+        payload.opening_balance = balanceAmount;
+        payload.opening_balance_type = data.balance_type === 'receivable' ? 'debit' : 'credit';
+      }
+      
+      // DON'T send business_id - it's handled by the backend from request context
+
+      const response = await partyApi.post('/parties', payload);
       return response.data;
     },
     onSuccess: () => {
@@ -65,7 +89,11 @@ export default function NewPartyPage() {
       router.push('/parties');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create party');
+      // Handle array of error messages from backend validation
+      const errorMessage = Array.isArray(error.response?.data?.message) 
+        ? error.response.data.message.join(', ')
+        : error.response?.data?.message || 'Failed to create party';
+      toast.error(errorMessage);
     },
   });
 

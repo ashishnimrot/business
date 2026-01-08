@@ -52,3 +52,4 @@ Once `app/not_used/` is removed, your project structure will be:
 **The reorganization is 95% complete!** Just need to handle the `app/not_used/` directory manually.
 
 
+
