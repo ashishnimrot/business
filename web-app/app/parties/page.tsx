@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -120,6 +120,7 @@ export default function PartiesPage() {
 
   const form = useForm<PartyFormValues>({
     resolver: zodResolver(partySchema),
+    mode: 'onBlur', // Only validate on blur, not on every keystroke
     defaultValues: {
       name: '',
       type: 'customer',
@@ -208,25 +209,37 @@ export default function PartiesPage() {
 
   const partiesList = Array.isArray(parties) ? parties : [];
 
-  const filteredParties = partiesList.filter((party) => {
-    const matchesSearch = party.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      party.phone?.includes(searchQuery) ||
-      party.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesType = filterType === 'all' || party.type === filterType;
-    
-    return matchesSearch && matchesType;
-  });
+  // Memoize filtered parties to prevent recalculation on every render
+  const filteredParties = useMemo(() => {
+    return partiesList.filter((party) => {
+      const matchesSearch = party.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        party.phone?.includes(searchQuery) ||
+        party.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesType = filterType === 'all' || party.type === filterType;
+      
+      return matchesSearch && matchesType;
+    });
+  }, [partiesList, searchQuery, filterType]);
 
-  // Stats
-  const totalCustomers = partiesList.filter(p => p.type === 'customer').length;
-  const totalSuppliers = partiesList.filter(p => p.type === 'supplier').length;
-  const totalReceivable = partiesList
-    .filter(p => (p.balance || 0) > 0)
-    .reduce((sum, p) => sum + Number(p.balance || 0), 0);
-  const totalPayable = partiesList
-    .filter(p => (p.balance || 0) < 0)
-    .reduce((sum, p) => sum + Math.abs(Number(p.balance || 0)), 0);
+  // Memoize stats calculations to prevent recalculation on every render
+  const stats = useMemo(() => {
+    const totalCustomers = partiesList.filter(p => p.type === 'customer').length;
+    const totalSuppliers = partiesList.filter(p => p.type === 'supplier').length;
+    const totalReceivable = partiesList
+      .filter(p => (p.balance || 0) > 0)
+      .reduce((sum, p) => sum + Number(p.balance || 0), 0);
+    const totalPayable = partiesList
+      .filter(p => (p.balance || 0) < 0)
+      .reduce((sum, p) => sum + Math.abs(Number(p.balance || 0)), 0);
+    
+    return {
+      totalCustomers,
+      totalSuppliers,
+      totalReceivable,
+      totalPayable,
+    };
+  }, [partiesList]);
 
   const getTypeVariant = (type: string): "default" | "secondary" | "outline" => {
     switch (type) {
@@ -524,14 +537,14 @@ export default function PartiesPage() {
             <Card>
               <CardContent className="pt-4">
                 <div className="text-sm text-muted-foreground">Customers</div>
-                <div className="text-2xl font-bold text-blue-600">{totalCustomers}</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.totalCustomers}</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-4">
                 <div className="text-sm text-muted-foreground">To Receive</div>
                 <div className="text-2xl font-bold text-green-600">
-                  ₹{totalReceivable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  ₹{stats.totalReceivable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                 </div>
               </CardContent>
             </Card>
@@ -539,7 +552,7 @@ export default function PartiesPage() {
               <CardContent className="pt-4">
                 <div className="text-sm text-muted-foreground">To Pay</div>
                 <div className="text-2xl font-bold text-red-600">
-                  ₹{totalPayable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  ₹{stats.totalPayable.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                 </div>
               </CardContent>
             </Card>
