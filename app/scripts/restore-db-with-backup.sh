@@ -24,6 +24,11 @@ APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKUP_DIR="${1:-$APP_DIR/db_backup}"  # Default or provided backup directory
 ENV_FILE="$APP_DIR/.env.production"
 
+echo "BACKUP_DIR: $BACKUP_DIR"
+echo "ENV_FILE: $ENV_FILE"
+echo "APP_DIR: $APP_DIR"
+echo "SCRIPT_DIR: $SCRIPT_DIR"
+
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║     DATABASE RESTORE WITH BACKUP IMPORT                        ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
