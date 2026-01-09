@@ -13,16 +13,23 @@ export function PageTransition({ children, className }: PageTransitionProps) {
   const pathname = usePathname();
   const [displayChildren, setDisplayChildren] = React.useState(children);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const childrenRef = React.useRef(children);
 
+  // Update ref when children changes
+  React.useEffect(() => {
+    childrenRef.current = children;
+  }, [children]);
+
+  // Only transition when pathname changes
   React.useEffect(() => {
     setIsTransitioning(true);
     const timer = setTimeout(() => {
-      setDisplayChildren(children);
+      setDisplayChildren(childrenRef.current);
       setIsTransitioning(false);
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [pathname, children]);
+  }, [pathname]); // Only depend on pathname, not children
 
   return (
     <div

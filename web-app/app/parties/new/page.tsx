@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save, Building2, User, Phone, Mail, MapPin, FileText } from 'lucide-react';
@@ -131,12 +131,17 @@ export default function NewPartyPage() {
     }
   };
 
-  const handleChange = (field: keyof PartyFormData, value: string) => {
+  const handleChange = useCallback((field: keyof PartyFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
-  };
+    setErrors(prev => {
+      if (prev[field]) {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      }
+      return prev;
+    });
+  }, []);
 
   return (
     <AppLayout>
