@@ -60,6 +60,63 @@ export class CreatePaymentDto {
   notes?: string;
 }
 
+export class UpdatePaymentDto {
+  @IsOptional()
+  @IsUUID()
+  party_id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  invoice_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(['payment_in', 'payment_out'])
+  transaction_type?: string;
+
+  @IsOptional()
+  @IsDateString()
+  transaction_date?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(['cash', 'bank', 'upi', 'cheque', 'credit', 'card'])
+  payment_mode?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  reference_number?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  bank_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 20)
+  cheque_number?: string;
+
+  @IsOptional()
+  @IsDateString()
+  cheque_date?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(['active', 'cancelled'])
+  status?: string;
+}
+
 export class PaymentResponseDto {
   id: string;
   business_id: string;

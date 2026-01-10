@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -24,6 +26,7 @@ import { Permission } from '@business-app/shared/constants';
 import { PaymentService } from '../services/payment.service';
 import {
   CreatePaymentDto,
+  UpdatePaymentDto,
   PaymentResponseDto,
 } from '@business-app/shared/dto';
 import { Transaction } from '../entities/transaction.entity';
@@ -168,6 +171,61 @@ export class PaymentController {
     validateOptionalUUID(invoiceId, 'invoiceId');
     const transactions = await this.paymentService.findByInvoiceId(invoiceId);
     return transactions.map((t) => this.toResponseDto(t));
+  }
+
+  @Patch(':id')
+  @UseGuards(PermissionGuard)
+  @RequirePermission(Permission.PAYMENT_UPDATE)
+  @ApiOperation({ summary: 'Update payment' })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment updated successfully',
+    type: PaymentResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  async update(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() updateDto: UpdatePaymentDto
+  ): Promise<PaymentResponseDto> {
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
+    // Business ID is validated by CrossServiceBusinessContextGuard
+    const businessId = req.businessContext?.businessId || req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
+    const transaction = await this.paymentService.update(businessId, id, updateDto);
+    return this.toResponseDto(transaction);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(PermissionGuard)
+  @RequirePermission(Permission.PAYMENT_DELETE)
+  @ApiOperation({ summary: 'Delete payment' })
+  @ApiResponse({
+    status: 204,
+    description: 'Payment deleted successfully',
+  })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  async delete(
+    @Request() req: any,
+    @Param('id') id: string
+  ): Promise<void> {
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
+    // Business ID is validated by CrossServiceBusinessContextGuard
+    const businessId = req.businessContext?.businessId || req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
+    await this.paymentService.delete(businessId, id);
   }
 
   /**

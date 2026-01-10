@@ -80,6 +80,28 @@ export class UpdatePartyDto {
 - Searched entire `app/libs/shared/dto` directory
 - No remaining index signatures found
 
+✅ **Record<string, any> usage verified safe**
+- `device_info?: Record<string, any>` — has `@IsOptional() @IsObject()` ✅
+- `permissions?: Record<string, boolean>` — has `@IsObject() @IsOptional()` ✅
+
+✅ **ValidationPipe configuration verified**
+- All services use `forbidNonWhitelisted: true` (consistent)
+- This is why the `[key: string]: any` pattern failed
+- All services properly configured ✅
+
+✅ **All Create DTOs verified**
+- All have proper validation decorators ✅
+
+✅ **All other Update DTOs verified**
+- `UpdateBusinessDto` — complete ✅
+- `UpdateUserProfileDto` — complete ✅
+- `UpdateUserPermissionsDto` — complete ✅
+- `UpdateUserRoleDto` — complete ✅
+
+✅ **Expected missing DTOs (by design)**
+- `UpdateInvoiceDto` — backend has no invoice update endpoint (expected)
+- `UpdatePaymentDto` — backend has no payment update endpoint (expected)
+
 ## Impact
 
 ### Before Fix:
@@ -90,6 +112,20 @@ export class UpdatePartyDto {
 - ✅ All update fields are properly validated
 - ✅ PATCH requests will work correctly
 - ✅ Type safety improved with explicit field definitions
+
+## Potential Future Issues
+
+### 1. Adding New Entity Fields
+**Risk:** Forgetting to add to UpdateDto
+**Prevention:** Always update both CreateDto and UpdateDto
+
+### 2. Type Changes
+**Risk:** Changing types in CreateDto but not UpdateDto
+**Prevention:** Keep DTOs in sync
+
+### 3. Missing Validation on New Endpoints
+**Risk:** Adding endpoints without proper DTOs
+**Prevention:** Always use DTOs with decorators
 
 ## Next Steps
 

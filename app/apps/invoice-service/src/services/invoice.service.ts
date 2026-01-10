@@ -6,7 +6,7 @@ import {
 import { InvoiceRepository } from '../repositories/invoice.repository';
 import { InvoiceItemRepository } from '../repositories/invoice-item.repository';
 import { GstCalculationService } from './gst-calculation.service';
-import { CreateInvoiceDto } from '@business-app/shared/dto';
+import { CreateInvoiceDto, UpdateInvoiceDto } from '@business-app/shared/dto';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 
@@ -200,6 +200,149 @@ export class InvoiceService {
       page,
       limit,
     };
+  }
+
+  /**
+   * Update invoice
+   */
+  async update(
+    businessId: string,
+    id: string,
+    updateDto: UpdateInvoiceDto
+  ): Promise<Invoice> {
+    // Verify invoice exists and belongs to business
+    const invoice = await this.findById(businessId, id);
+
+    // Prepare update data
+    const updateData: any = {};
+
+    // If items are being updated, recalculate totals
+    if (updateDto.items && updateDto.items.length > 0) {
+      const isInterstate = updateDto.is_interstate ?? invoice.is_interstate;
+      const totals = GstCalculationService.calculateInvoiceTotals(
+        updateDto.items.map((item) => ({
+          quantity: item.quantity,
+          unitPrice: item.unit_price,
+          discountPercent: item.discount_percent || 0,
+          taxRate: item.tax_rate || 0,
+          cessRate: item.cess_rate || 0,
+        })),
+        isInterstate,
+        false // tax_inclusive
+      );
+
+      // Update invoice totals
+      updateData.subtotal = totals.subtotal;
+      updateData.discount_amount = totals.discountAmount;
+      updateData.taxable_amount = totals.taxableAmount;
+      updateData.cgst_amount = totals.cgstAmount;
+      updateData.sgst_amount = totals.sgstAmount;
+      updateData.igst_amount = totals.igstAmount;
+      updateData.cess_amount = totals.cessAmount;
+      updateData.total_amount = totals.totalAmount;
+      updateData.is_interstate = isInterstate;
+
+      // Delete existing items and create new ones
+      const existingItems = await this.invoiceItemRepository.findByInvoiceId(invoice.id);
+      for (const item of existingItems) {
+        await this.invoiceItemRepository.delete(item.id);
+      }
+
+      // Create new invoice items
+      for (let i = 0; i < updateDto.items.length; i++) {
+        const itemDto = updateDto.items[i];
+        const itemGst = GstCalculationService.calculateItemGst(
+          itemDto.quantity,
+          itemDto.unit_price,
+          itemDto.discount_percent || 0,
+          itemDto.tax_rate || 0,
+          isInterstate,
+          false,
+          itemDto.cess_rate || 0
+        );
+
+        const baseAmount = itemDto.quantity * itemDto.unit_price;
+        const discountAmount =
+          (baseAmount * (itemDto.discount_percent || 0)) / 100;
+
+        await this.invoiceItemRepository.create({
+          invoice_id: invoice.id,
+          item_id: itemDto.item_id,
+          item_name: itemDto.item_name,
+          item_description: itemDto.item_description,
+          hsn_code: itemDto.hsn_code,
+          unit: itemDto.unit,
+          quantity: itemDto.quantity,
+          unit_price: itemDto.unit_price,
+          discount_percent: itemDto.discount_percent || 0,
+          discount_amount: discountAmount,
+          tax_rate: itemDto.tax_rate || 0,
+          cgst_rate: itemGst.cgstRate,
+          sgst_rate: itemGst.sgstRate,
+          igst_rate: itemGst.igstRate,
+          cess_rate: itemDto.cess_rate || 0,
+          taxable_amount: itemGst.taxableAmount,
+          cgst_amount: itemGst.cgstAmount,
+          sgst_amount: itemGst.sgstAmount,
+          igst_amount: itemGst.igstAmount,
+          cess_amount: itemGst.cessAmount,
+          total_amount: itemGst.totalAmount,
+          sort_order: i,
+        });
+      }
+    }
+
+    // Add other fields to update data
+    if (updateDto.party_id !== undefined) {
+      updateData.party_id = updateDto.party_id;
+    }
+    if (updateDto.invoice_type !== undefined) {
+      updateData.invoice_type = updateDto.invoice_type;
+    }
+    if (updateDto.invoice_date !== undefined) {
+      updateData.invoice_date = new Date(updateDto.invoice_date);
+    }
+    if (updateDto.due_date !== undefined) {
+      updateData.due_date = updateDto.due_date ? new Date(updateDto.due_date) : null;
+    }
+    if (updateDto.place_of_supply !== undefined) {
+      updateData.place_of_supply = updateDto.place_of_supply;
+    }
+    if (updateDto.is_interstate !== undefined && !updateDto.items) {
+      updateData.is_interstate = updateDto.is_interstate;
+    }
+    if (updateDto.is_export !== undefined) {
+      updateData.is_export = updateDto.is_export;
+    }
+    if (updateDto.is_rcm !== undefined) {
+      updateData.is_rcm = updateDto.is_rcm;
+    }
+    if (updateDto.terms !== undefined) {
+      updateData.terms = updateDto.terms;
+    }
+    if (updateDto.notes !== undefined) {
+      updateData.notes = updateDto.notes;
+    }
+    if (updateDto.status !== undefined) {
+      updateData.status = updateDto.status;
+    }
+
+    // Update invoice
+    await this.invoiceRepository.update(id, updateData);
+
+    // Reload invoice with items
+    return this.findById(businessId, id);
+  }
+
+  /**
+   * Delete invoice (soft delete)
+   */
+  async delete(businessId: string, id: string): Promise<void> {
+    // Verify invoice exists
+    await this.findById(businessId, id);
+
+    // Soft delete
+    await this.invoiceRepository.delete(id);
   }
 }
 

@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { TransactionRepository } from '../repositories/transaction.repository';
-import { CreatePaymentDto } from '@business-app/shared/dto';
+import { CreatePaymentDto, UpdatePaymentDto } from '@business-app/shared/dto';
 import { Transaction } from '../entities/transaction.entity';
 
 /**
@@ -128,6 +128,78 @@ export class PaymentService {
    */
   async findByInvoiceId(invoiceId: string): Promise<Transaction[]> {
     return this.transactionRepository.findByInvoiceId(invoiceId);
+  }
+
+  /**
+   * Update payment
+   */
+  async update(
+    businessId: string,
+    id: string,
+    updateDto: UpdatePaymentDto
+  ): Promise<Transaction> {
+    // Verify payment exists and belongs to business
+    const transaction = await this.findById(businessId, id);
+
+    // Prepare update data
+    const updateData: any = {};
+
+    if (updateDto.party_id !== undefined) {
+      updateData.party_id = updateDto.party_id;
+    }
+    if (updateDto.invoice_id !== undefined) {
+      updateData.invoice_id = updateDto.invoice_id;
+    }
+    if (updateDto.transaction_type !== undefined) {
+      updateData.transaction_type = updateDto.transaction_type;
+    }
+    if (updateDto.transaction_date !== undefined) {
+      updateData.transaction_date = new Date(updateDto.transaction_date);
+    }
+    if (updateDto.amount !== undefined) {
+      if (updateDto.amount <= 0) {
+        throw new BadRequestException('Amount must be greater than 0');
+      }
+      updateData.amount = updateDto.amount;
+    }
+    if (updateDto.payment_mode !== undefined) {
+      updateData.payment_mode = updateDto.payment_mode;
+    }
+    if (updateDto.reference_number !== undefined) {
+      updateData.reference_number = updateDto.reference_number;
+    }
+    if (updateDto.bank_name !== undefined) {
+      updateData.bank_name = updateDto.bank_name;
+    }
+    if (updateDto.cheque_number !== undefined) {
+      updateData.cheque_number = updateDto.cheque_number;
+    }
+    if (updateDto.cheque_date !== undefined) {
+      updateData.cheque_date = updateDto.cheque_date ? new Date(updateDto.cheque_date) : null;
+    }
+    if (updateDto.notes !== undefined) {
+      updateData.notes = updateDto.notes;
+    }
+    if (updateDto.status !== undefined) {
+      updateData.status = updateDto.status;
+    }
+
+    // Update transaction
+    await this.transactionRepository.update(id, updateData);
+
+    // Reload and return
+    return this.findById(businessId, id);
+  }
+
+  /**
+   * Delete payment (soft delete)
+   */
+  async delete(businessId: string, id: string): Promise<void> {
+    // Verify payment exists
+    await this.findById(businessId, id);
+
+    // Soft delete
+    await this.transactionRepository.delete(id);
   }
 }
 

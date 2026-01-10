@@ -108,6 +108,60 @@ export class CreateInvoiceDto {
   notes?: string;
 }
 
+export class UpdateInvoiceDto {
+  @IsOptional()
+  @IsUUID()
+  party_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(['sale', 'purchase', 'quotation', 'proforma'])
+  invoice_type?: string;
+
+  @IsOptional()
+  @IsDateString()
+  invoice_date?: string;
+
+  @IsOptional()
+  @IsDateString()
+  due_date?: string;
+
+  @IsOptional()
+  @IsString()
+  place_of_supply?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_interstate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_export?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_rcm?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceItemDto)
+  items?: InvoiceItemDto[];
+
+  @IsOptional()
+  @IsString()
+  terms?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(['draft', 'sent', 'paid', 'cancelled'])
+  status?: string;
+}
+
 export class InvoiceResponseDto {
   id: string;
   business_id: string;

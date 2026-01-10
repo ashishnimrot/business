@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -25,6 +27,7 @@ import { Permission } from '@business-app/shared/constants';
 import { InvoiceService } from '../services/invoice.service';
 import {
   CreateInvoiceDto,
+  UpdateInvoiceDto,
   InvoiceResponseDto,
 } from '@business-app/shared/dto';
 import { Invoice } from '../entities/invoice.entity';
@@ -171,6 +174,61 @@ export class InvoiceController {
     }
     const invoice = await this.invoiceService.findById(businessId, id);
     return this.toResponseDto(invoice);
+  }
+
+  @Patch(':id')
+  @UseGuards(PermissionGuard)
+  @RequirePermission(Permission.INVOICE_UPDATE)
+  @ApiOperation({ summary: 'Update invoice' })
+  @ApiResponse({
+    status: 200,
+    description: 'Invoice updated successfully',
+    type: InvoiceResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Invoice not found' })
+  async update(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() updateDto: UpdateInvoiceDto
+  ): Promise<InvoiceResponseDto> {
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
+    // Business ID is validated by CrossServiceBusinessContextGuard
+    const businessId = req.businessContext?.businessId || req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
+    const invoice = await this.invoiceService.update(businessId, id, updateDto);
+    return this.toResponseDto(invoice);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(PermissionGuard)
+  @RequirePermission(Permission.INVOICE_DELETE)
+  @ApiOperation({ summary: 'Delete invoice' })
+  @ApiResponse({
+    status: 204,
+    description: 'Invoice deleted successfully',
+  })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Invoice not found' })
+  async delete(
+    @Request() req: any,
+    @Param('id') id: string
+  ): Promise<void> {
+    // Validate UUID format
+    validateOptionalUUID(id, 'id');
+
+    // Business ID is validated by CrossServiceBusinessContextGuard
+    const businessId = req.businessContext?.businessId || req.headers['x-business-id'] || req.business_id;
+    if (!businessId) {
+      throw new BadRequestException('Business ID is required');
+    }
+    await this.invoiceService.delete(businessId, id);
   }
 
   /**
