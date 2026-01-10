@@ -82,6 +82,24 @@ export default function EditPartyPage() {
     }
   }, [party]);
 
+  /**
+   * Updates an existing party
+   * 
+   * **Field Mappings:**
+   * - `address` → `billing_address_line1`
+   * - `city` → `billing_city`
+   * - `state` → `billing_state`
+   * - `pincode` → `billing_pincode`
+   * - `balance_type: 'receivable'` → `opening_balance_type: 'debit'`
+   * - `balance_type: 'payable'` → `opening_balance_type: 'credit'`
+   * 
+   * **Excluded Fields:**
+   * - `business_id` - Added by backend from request context
+   * 
+   * **Business Logic:**
+   * - Receivable (they owe you) = Debit balance (asset)
+   * - Payable (you owe them) = Credit balance (liability)
+   */
   const updatePartyMutation = useMutation({
     mutationFn: async (data: PartyFormData) => {
       // Build a clean payload with correct field names matching backend DTO
@@ -102,8 +120,6 @@ export default function EditPartyPage() {
       if (data.pincode) payload.billing_pincode = data.pincode;
       
       // Map balance_type to opening_balance_type and convert values
-      // receivable (they owe you) = debit balance
-      // payable (you owe them) = credit balance
       const balanceAmount = parseFloat(data.opening_balance) || 0;
       if (balanceAmount !== 0) {
         payload.opening_balance = balanceAmount;

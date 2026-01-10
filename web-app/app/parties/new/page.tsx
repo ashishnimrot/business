@@ -50,6 +50,24 @@ export default function NewPartyPage() {
 
   const [errors, setErrors] = useState<Partial<PartyFormData>>({});
 
+  /**
+   * Creates a new party (customer/supplier)
+   * 
+   * **Field Mappings:**
+   * - `address` → `billing_address_line1`
+   * - `city` → `billing_city`
+   * - `state` → `billing_state`
+   * - `pincode` → `billing_pincode`
+   * - `balance_type: 'receivable'` → `opening_balance_type: 'debit'`
+   * - `balance_type: 'payable'` → `opening_balance_type: 'credit'`
+   * 
+   * **Excluded Fields:**
+   * - `business_id` - Added by backend from request context
+   * 
+   * **Business Logic:**
+   * - Receivable (they owe you) = Debit balance (asset)
+   * - Payable (you owe them) = Credit balance (liability)
+   */
   const createPartyMutation = useMutation({
     mutationFn: async (data: PartyFormData) => {
       // Build a clean payload with correct field names matching backend DTO
@@ -70,15 +88,11 @@ export default function NewPartyPage() {
       if (data.pincode) payload.billing_pincode = data.pincode;
       
       // Map balance_type to opening_balance_type and convert values
-      // receivable (they owe you) = debit balance
-      // payable (you owe them) = credit balance
       const balanceAmount = parseFloat(data.opening_balance) || 0;
       if (balanceAmount !== 0) {
         payload.opening_balance = balanceAmount;
         payload.opening_balance_type = data.balance_type === 'receivable' ? 'debit' : 'credit';
       }
-      
-      // DON'T send business_id - it's handled by the backend from request context
 
       const response = await partyApi.post('/parties', payload);
       return response.data;

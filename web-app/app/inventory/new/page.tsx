@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AppLayout, BottomNav } from '@/components/layout';
 import { PageHeader } from '@/components/ui/page-header';
 import { inventoryApi } from '@/lib/api-client';
-import { useAuthStore } from '@/lib/auth-store';
+import { buildInventoryItemPayload, formatApiError } from '@/lib/payload-utils';
 import { toast } from 'sonner';
 
 interface ItemFormData {
@@ -36,7 +36,6 @@ const GST_RATES = ['0', '5', '12', '18', '28'];
 export default function NewItemPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { businessId } = useAuthStore();
 
   const [formData, setFormData] = useState<ItemFormData>({
     name: '',
@@ -54,17 +53,40 @@ export default function NewItemPage() {
 
   const [errors, setErrors] = useState<Partial<ItemFormData>>({});
 
+  /**
+   * Creates a new inventory item
+   * 
+   * **Field Mappings:**
+   * - `gst_rate` (form) → `tax_rate` (backend) - Handled by buildInventoryItemPayload
+   * - `name` → `name` (trimmed)
+   * - `selling_price` → `selling_price` (string → number)
+   * - `purchase_price` → `purchase_price` (string → number, optional)
+   * - `current_stock` → `current_stock` (string → integer, optional)
+   * - `low_stock_threshold` → `low_stock_threshold` (string → integer, optional)
+   * 
+   * **Excluded Fields:**
+   * - `business_id` - Added by backend from request context
+   * - `category` (string) - Backend expects `category_id` (UUID). Not implemented yet.
+   * - `unit` (string) - Backend expects `unit_id` (UUID). Not implemented yet.
+   *   Backend will use default unit if `unit_id` is not provided.
+   */
   const createItemMutation = useMutation({
     mutationFn: async (data: ItemFormData) => {
-      const response = await inventoryApi.post('/items', {
-        ...data,
-        business_id: businessId,
-        purchase_price: parseFloat(data.purchase_price) || 0,
-        selling_price: parseFloat(data.selling_price) || 0,
-        gst_rate: parseFloat(data.gst_rate) || 0,
-        current_stock: parseInt(data.current_stock) || 0,
-        low_stock_threshold: parseInt(data.low_stock_threshold) || 0,
+      // Build clean payload using utility function
+      // This handles all field mappings, empty string removal, and type conversions
+      const payload = buildInventoryItemPayload({
+        name: data.name,
+        sku: data.sku,
+        hsn_code: data.hsn_code,
+        description: data.description,
+        purchase_price: data.purchase_price,
+        selling_price: data.selling_price,
+        gst_rate: data.gst_rate,
+        current_stock: data.current_stock,
+        low_stock_threshold: data.low_stock_threshold,
       });
+
+      const response = await inventoryApi.post('/items', payload);
       return response.data;
     },
     onSuccess: () => {
@@ -73,7 +95,7 @@ export default function NewItemPage() {
       router.push('/inventory');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create item');
+      toast.error(formatApiError(error));
     },
   });
 

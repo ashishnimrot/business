@@ -30,25 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { exportInventoryToExcel } from '@/lib/export-utils';
-
-// Item form validation schema - aligned with backend CreateItemDto
-// REQUIRED: name, selling_price only
-// ALL OTHER FIELDS ARE OPTIONAL
-const itemSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(200, 'Name too long'),
-  description: z.string().optional(),
-  category: z.string().optional(),
-  hsn_code: z.string().optional().refine(
-    (val) => !val || (val.length >= 4 && val.length <= 8),
-    'HSN code must be 4-8 characters'
-  ),
-  unit: z.string().optional(),
-  selling_price: z.string().min(1, 'Selling price is required'),
-  purchase_price: z.string().optional(),
-  tax_rate: z.string().optional(),
-  opening_stock: z.string().optional(),
-  min_stock_level: z.string().optional(),
-});
+import { itemSchema, type ItemFormValues } from '@/lib/schemas';
 
 // Helper to clean payload - removes empty strings and undefined values
 const cleanPayload = (data: Record<string, any>): Record<string, any> => {
@@ -61,7 +43,7 @@ const cleanPayload = (data: Record<string, any>): Record<string, any> => {
   return cleaned;
 };
 
-type ItemFormValues = z.infer<typeof itemSchema>;
+// ItemFormValues is imported from schemas
 
 interface Item {
   id: string;
@@ -134,20 +116,20 @@ export default function InventoryPage() {
   const onSubmit = async (data: ItemFormValues) => {
     setIsSubmitting(true);
     try {
-      // Build payload with only backend-expected fields
-      const rawPayload = {
+      // Build payload using utility function for consistency
+      const { buildInventoryItemPayload } = await import('@/lib/payload-utils');
+      const payload = buildInventoryItemPayload({
         name: data.name,
-        description: data.description,
+        sku: data.sku,
         hsn_code: data.hsn_code,
-        selling_price: parseFloat(data.selling_price),
-        purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : undefined,
-        tax_rate: data.tax_rate ? parseFloat(data.tax_rate) : undefined,
-        current_stock: data.opening_stock ? parseFloat(data.opening_stock) : undefined,
-        low_stock_threshold: data.min_stock_level ? parseFloat(data.min_stock_level) : undefined,
-      };
-      
-      // Remove empty strings and undefined values
-      const payload = cleanPayload(rawPayload);
+        description: data.description,
+        purchase_price: data.purchase_price,
+        selling_price: data.selling_price,
+        gst_rate: data.tax_rate, // Form uses tax_rate, utility maps it to tax_rate in backend
+        // Map form field names to backend field names
+        current_stock: data.opening_stock || data.current_stock, // Form uses opening_stock
+        low_stock_threshold: data.min_stock_level || data.low_stock_threshold, // Form uses min_stock_level
+      });
 
       await inventoryApi.post('/items', payload);
       toast.success('Item created successfully');
@@ -155,8 +137,9 @@ export default function InventoryPage() {
       form.reset();
       fetchItems();
     } catch (error: any) {
+      const { formatApiError } = await import('@/lib/payload-utils');
       toast.error('Failed to create item', {
-        description: error.response?.data?.message || 'Please try again',
+        description: formatApiError(error),
       });
     } finally {
       setIsSubmitting(false);

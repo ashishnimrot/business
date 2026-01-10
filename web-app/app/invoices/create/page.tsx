@@ -16,27 +16,8 @@ import { toast } from 'sonner';
 import { HelpTooltip } from '@/components/ui/help-tooltip';
 import { ArrowLeft, Plus, Trash2, Calculator } from 'lucide-react';
 
-// Invoice form validation schema - aligned with backend CreateInvoiceDto
-// REQUIRED: party_id, invoice_type, invoice_date, items array
-// OPTIONAL: due_date, notes, terms
-// Item REQUIRED: item_name, quantity, unit_price
-// Item OPTIONAL: item_id, discount_percent, tax_rate
-const invoiceSchema = z.object({
-  invoice_type: z.enum(['sale', 'purchase', 'quotation', 'proforma']),
-  party_id: z.string().min(1, 'Please select a party'),
-  invoice_date: z.string().min(1, 'Invoice date is required'),
-  due_date: z.string().optional(),
-  items: z.array(z.object({
-    item_id: z.string().optional(),
-    item_name: z.string().min(2, 'Item name is required'),
-    quantity: z.string().min(1, 'Quantity is required'),
-    unit_price: z.string().min(1, 'Price is required'),
-    discount_percent: z.string().optional(),
-    tax_rate: z.string().optional(),
-  })).min(1, 'Add at least one item'),
-  notes: z.string().optional(),
-  terms: z.string().optional(),
-});
+// Import centralized schema
+import { invoiceSchema, type InvoiceFormValues } from '@/lib/schemas';
 
 // Helper to clean payload - removes empty strings and undefined values
 const cleanPayload = (data: Record<string, any>): Record<string, any> => {
@@ -49,7 +30,7 @@ const cleanPayload = (data: Record<string, any>): Record<string, any> => {
   return cleaned;
 };
 
-type InvoiceFormValues = z.infer<typeof invoiceSchema>;
+// InvoiceFormValues is imported from schemas
 
 interface Party {
   id: string;
@@ -207,8 +188,9 @@ export default function CreateInvoicePage() {
       toast.success('Invoice created successfully');
       router.push('/invoices');
     } catch (error: any) {
+      const { formatApiError } = await import('@/lib/payload-utils');
       toast.error('Failed to create invoice', {
-        description: error.response?.data?.message || 'Please try again',
+        description: formatApiError(error),
       });
     } finally {
       setIsSubmitting(false);

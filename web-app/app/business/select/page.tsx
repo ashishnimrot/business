@@ -15,38 +15,8 @@ import { businessApi } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/auth-store';
 import { Building2, Plus } from 'lucide-react';
 
-// Business form validation schema - aligned with backend CreateBusinessDto
-// REQUIRED: name only
-// ALL OTHER FIELDS ARE OPTIONAL - validate format only if value provided
-const businessSchema = z.object({
-  name: z.string().min(2, 'Business name must be at least 2 characters').max(200, 'Name too long'),
-  type: z.string().optional(), // retailer, wholesaler, manufacturer, service
-  gstin: z.string().optional().refine(
-    (val) => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(val),
-    'Invalid GSTIN format (15 characters required)'
-  ),
-  pan: z.string().optional().refine(
-    (val) => !val || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val),
-    'Invalid PAN format (10 characters required)'
-  ),
-  email: z.string().optional().refine(
-    (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-    'Invalid email format'
-  ),
-  phone: z.string().optional().refine(
-    (val) => !val || /^[6-9]\d{9}$/.test(val),
-    'Invalid phone (10 digits starting with 6-9)'
-  ),
-  // Address fields - all optional
-  address_line1: z.string().optional(),
-  address_line2: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  pincode: z.string().optional().refine(
-    (val) => !val || /^\d{6}$/.test(val),
-    'Invalid pincode (6 digits required)'
-  ),
-});
+// Import centralized schema
+import { businessSchema, type BusinessFormValues } from '@/lib/schemas';
 
 // Helper to clean payload - removes empty strings and undefined values
 const cleanPayload = (data: Record<string, any>): Record<string, any> => {
@@ -59,7 +29,7 @@ const cleanPayload = (data: Record<string, any>): Record<string, any> => {
   return cleaned;
 };
 
-type BusinessFormValues = z.infer<typeof businessSchema>;
+// BusinessFormValues is imported from schemas
 
 interface Business {
   id: string;
@@ -83,7 +53,7 @@ export default function BusinessSelectPage() {
     resolver: zodResolver(businessSchema),
     defaultValues: {
       name: '',
-      type: '',
+      type: undefined, // Optional enum, use undefined instead of empty string
       gstin: '',
       pan: '',
       email: '',

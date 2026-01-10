@@ -16,18 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, Minus } from 'lucide-react';
 
-// Stock adjustment validation schema
-const stockSchema = z.object({
-  item_id: z.string().min(1, 'Please select an item'),
-  adjustment_type: z.enum(['increase', 'decrease']),
-  quantity: z.string().min(1, 'Quantity is required').refine(
-    (val) => parseFloat(val) > 0,
-    'Quantity must be greater than 0'
-  ),
-  reason: z.string().optional(),
-});
+// Import centralized schema
+import { stockAdjustmentSchema, type StockAdjustmentFormValues } from '@/lib/schemas';
 
-type StockFormValues = z.infer<typeof stockSchema>;
+// Use StockAdjustmentFormValues from schemas
+type StockFormValues = StockAdjustmentFormValues;
 
 interface Item {
   id: string;
@@ -46,7 +39,7 @@ export default function StockAdjustmentPage() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
   const form = useForm<StockFormValues>({
-    resolver: zodResolver(stockSchema),
+    resolver: zodResolver(stockAdjustmentSchema),
     defaultValues: {
       item_id: '',
       adjustment_type: 'increase',

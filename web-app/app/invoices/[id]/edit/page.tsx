@@ -22,6 +22,7 @@ import { AppLayout, BottomNav } from '@/components/layout';
 import { PageHeader } from '@/components/ui/page-header';
 import { FormSkeleton } from '@/components/ui/skeleton';
 import { invoiceApi, partyApi, inventoryApi } from '@/lib/api-client';
+import { formatApiError } from '@/lib/payload-utils';
 import { toast } from 'sonner';
 
 interface LineItem {
@@ -29,7 +30,7 @@ interface LineItem {
   item_name: string;
   quantity: number;
   unit_price: number;
-  gst_rate: number;
+  gst_rate: number; // Frontend uses gst_rate for display, maps to tax_rate for backend
   hsn_code: string;
   total: number;
 }
@@ -111,7 +112,8 @@ export default function EditInvoicePage() {
           item_name: item.item_name || item.name || '',
           quantity: Number(item.quantity || 1),
           unit_price: Number(item.unit_price || item.price || 0),
-          gst_rate: Number(item.gst_rate || 18),
+          // Backend returns tax_rate, but form uses gst_rate for display
+          gst_rate: Number(item.tax_rate || item.gst_rate || 18),
           hsn_code: item.hsn_code || '',
           total: Number(item.total || item.amount || 0),
         })),
@@ -119,17 +121,45 @@ export default function EditInvoicePage() {
     }
   }, [invoice]);
 
+  /**
+   * Updates an existing invoice
+   * 
+   * **Field Mappings:**
+   * - `gst_rate` (form items) → `tax_rate` (backend items)
+   * - All other fields map directly
+   * 
+   * **Note:** Form uses `gst_rate` for display consistency, but backend expects `tax_rate`.
+   * This mutation handles the mapping automatically.
+   */
   const updateInvoiceMutation = useMutation({
     mutationFn: async (data: InvoiceFormData) => {
       const subtotal = data.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
       const taxAmount = data.items.reduce((sum, item) => sum + (item.quantity * item.unit_price * item.gst_rate / 100), 0);
       
-      const response = await invoiceApi.put(`/invoices/${invoiceId}`, {
-        ...data,
+      // Map form data to backend DTO format
+      // Frontend uses gst_rate, but backend expects tax_rate in items
+      const payload = {
+        invoice_type: data.invoice_type,
+        party_id: data.party_id,
+        invoice_date: data.invoice_date,
+        due_date: data.due_date || undefined,
+        status: data.status,
+        notes: data.notes || undefined,
+        items: data.items.map(item => ({
+          item_id: item.item_id || undefined,
+          item_name: item.item_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          hsn_code: item.hsn_code || undefined,
+          tax_rate: item.gst_rate, // Map gst_rate to tax_rate for backend
+          discount_percent: 0, // Default if not provided
+        })),
         subtotal_amount: subtotal,
         tax_amount: taxAmount,
         total_amount: subtotal + taxAmount,
-      });
+      };
+      
+      const response = await invoiceApi.put(`/invoices/${invoiceId}`, payload);
       return response.data;
     },
     onSuccess: () => {
@@ -139,7 +169,7 @@ export default function EditInvoicePage() {
       router.push(`/invoices/${invoiceId}`);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update invoice');
+      toast.error(formatApiError(error));
     },
   });
 
@@ -233,7 +263,8 @@ export default function EditInvoicePage() {
         item_id: inventoryItem.id,
         item_name: inventoryItem.name || inventoryItem.item_name,
         unit_price: Number(inventoryItem.selling_price || inventoryItem.sale_price || 0),
-        gst_rate: Number(inventoryItem.gst_rate || 18),
+        // Backend returns tax_rate, but form uses gst_rate for display
+        gst_rate: Number(inventoryItem.tax_rate || inventoryItem.gst_rate || 18),
         hsn_code: inventoryItem.hsn_code || '',
       };
       newItems[index].total = newItems[index].quantity * newItems[index].unit_price * (1 + newItems[index].gst_rate / 100);

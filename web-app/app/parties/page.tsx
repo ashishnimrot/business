@@ -31,50 +31,8 @@ import {
 import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { exportPartiesToExcel } from '@/lib/export-utils';
 
-// Party form validation schema - aligned with backend CreatePartyDto
-// REQUIRED: name, type only
-// ALL OTHER FIELDS ARE OPTIONAL - validate format only if value provided
-const partySchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(200, 'Name too long'),
-  type: z.enum(['customer', 'supplier', 'both']),
-  // Optional fields - only validate format if non-empty
-  gstin: z.string().optional().refine(
-    (val) => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(val),
-    'Invalid GSTIN format (15 characters required)'
-  ),
-  pan: z.string().optional().refine(
-    (val) => !val || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val),
-    'Invalid PAN format (10 characters required)'
-  ),
-  email: z.string().optional().refine(
-    (val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
-    'Invalid email format'
-  ),
-  phone: z.string().optional().refine(
-    (val) => !val || /^[6-9]\d{9}$/.test(val),
-    'Invalid phone (10 digits starting with 6-9)'
-  ),
-  // Address fields - all optional
-  billing_address_line1: z.string().optional(),
-  billing_address_line2: z.string().optional(),
-  billing_city: z.string().optional(),
-  billing_state: z.string().optional(),
-  billing_pincode: z.string().optional().refine(
-    (val) => !val || /^\d{6}$/.test(val),
-    'Invalid pincode (6 digits required)'
-  ),
-  shipping_address_line1: z.string().optional(),
-  shipping_address_line2: z.string().optional(),
-  shipping_city: z.string().optional(),
-  shipping_state: z.string().optional(),
-  shipping_pincode: z.string().optional().refine(
-    (val) => !val || /^\d{6}$/.test(val),
-    'Invalid pincode (6 digits required)'
-  ),
-  // Financial fields - optional
-  credit_limit: z.string().optional(),
-  credit_period_days: z.string().optional(),
-});
+// Import centralized schema
+import { partySchema, type PartyFormValues } from '@/lib/schemas';
 
 // Helper to clean payload - removes empty strings and undefined values
 const cleanPayload = (data: Record<string, any>): Record<string, any> => {
@@ -88,7 +46,7 @@ const cleanPayload = (data: Record<string, any>): Record<string, any> => {
   return cleaned;
 };
 
-type PartyFormValues = z.infer<typeof partySchema>;
+// PartyFormValues is imported from schemas
 
 interface Party {
   id: string;

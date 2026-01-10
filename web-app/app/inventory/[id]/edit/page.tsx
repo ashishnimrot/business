@@ -13,6 +13,7 @@ import { AppLayout, BottomNav } from '@/components/layout';
 import { PageHeader } from '@/components/ui/page-header';
 import { FormSkeleton } from '@/components/ui/skeleton';
 import { inventoryApi } from '@/lib/api-client';
+import { buildInventoryItemPayload, formatApiError } from '@/lib/payload-utils';
 import { toast } from 'sonner';
 
 interface ItemFormData {
@@ -72,11 +73,12 @@ export default function EditItemPage() {
         name: item.name || item.item_name || '',
         sku: item.sku || '',
         hsn_code: item.hsn_code || '',
-        category: item.category || '',
-        unit: item.unit || 'pcs',
+        category: item.category || '', // Note: This is display-only, not sent to backend
+        unit: item.unit || 'pcs', // Note: This is display-only, not sent to backend
         purchase_price: String(item.purchase_price || 0),
         selling_price: String(item.selling_price || item.sale_price || 0),
-        gst_rate: String(item.gst_rate || 18),
+        // Backend returns tax_rate, but form uses gst_rate for display
+        gst_rate: String(item.tax_rate || item.gst_rate || 18),
         current_stock: String(item.current_stock || 0),
         low_stock_threshold: String(item.low_stock_threshold || 10),
         description: item.description || '',
@@ -84,16 +86,43 @@ export default function EditItemPage() {
     }
   }, [item]);
 
+  /**
+   * Updates an existing inventory item
+   * 
+   * **Field Mappings:**
+   * - `gst_rate` (form) → `tax_rate` (backend) - Handled by buildInventoryItemPayload
+   * - `name` → `name` (trimmed)
+   * - `selling_price` → `selling_price` (string → number)
+   * - `purchase_price` → `purchase_price` (string → number, optional)
+   * - `current_stock` → `current_stock` (string → integer, optional)
+   * - `low_stock_threshold` → `low_stock_threshold` (string → integer, optional)
+   * 
+   * **Excluded Fields:**
+   * - `business_id` - Added by backend from request context
+   * - `category` (string) - Backend expects `category_id` (UUID). Not implemented yet.
+   * - `unit` (string) - Backend expects `unit_id` (UUID). Not implemented yet.
+   */
   const updateItemMutation = useMutation({
     mutationFn: async (data: ItemFormData) => {
-      const response = await inventoryApi.put(`/items/${itemId}`, {
-        ...data,
-        purchase_price: parseFloat(data.purchase_price) || 0,
-        selling_price: parseFloat(data.selling_price) || 0,
-        gst_rate: parseFloat(data.gst_rate) || 0,
-        current_stock: parseInt(data.current_stock) || 0,
-        low_stock_threshold: parseInt(data.low_stock_threshold) || 0,
+      // Build clean payload using utility function
+      // This handles all field mappings, empty string removal, and type conversions
+      const payload = buildInventoryItemPayload({
+        name: data.name,
+        sku: data.sku,
+        hsn_code: data.hsn_code,
+        description: data.description,
+        purchase_price: data.purchase_price,
+        selling_price: data.selling_price,
+        gst_rate: data.gst_rate,
+        current_stock: data.current_stock,
+        low_stock_threshold: data.low_stock_threshold,
       });
+      
+      // Note: business_id is NOT sent - backend gets it from request context
+      // Note: category and unit are NOT sent - backend expects UUIDs (category_id, unit_id)
+      // These fields are kept in form for display only
+
+      const response = await inventoryApi.put(`/items/${itemId}`, payload);
       return response.data;
     },
     onSuccess: () => {
@@ -103,7 +132,7 @@ export default function EditItemPage() {
       router.push(`/inventory/${itemId}`);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update item');
+      toast.error(formatApiError(error));
     },
   });
 

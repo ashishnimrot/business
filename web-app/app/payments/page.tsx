@@ -32,25 +32,8 @@ import {
 import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { exportPaymentsToExcel } from '@/lib/export-utils';
 
-// Payment form validation schema - aligned with backend CreatePaymentDto
-// REQUIRED: party_id, transaction_type, transaction_date, amount, payment_mode
-// OPTIONAL: invoice_id, reference_number, bank_name, cheque_number, cheque_date, notes
-const paymentSchema = z.object({
-  party_id: z.string().min(1, 'Please select a party'),
-  invoice_id: z.string().optional(), // Optional per backend
-  transaction_type: z.enum(['payment_in', 'payment_out']),
-  transaction_date: z.string().min(1, 'Transaction date is required'),
-  amount: z.string().min(1, 'Amount is required').refine(
-    (val) => parseFloat(val) > 0,
-    'Amount must be greater than 0'
-  ),
-  payment_mode: z.enum(['cash', 'bank', 'upi', 'cheque', 'credit', 'card']),
-  reference_number: z.string().optional(),
-  bank_name: z.string().optional(),
-  cheque_number: z.string().optional(),
-  cheque_date: z.string().optional(),
-  notes: z.string().optional(),
-});
+// Import centralized schema
+import { paymentSchema, type PaymentFormValues } from '@/lib/schemas';
 
 // Helper to clean payload - removes empty strings and undefined values
 const cleanPayload = (data: Record<string, any>): Record<string, any> => {
@@ -63,7 +46,7 @@ const cleanPayload = (data: Record<string, any>): Record<string, any> => {
   return cleaned;
 };
 
-type PaymentFormValues = z.infer<typeof paymentSchema>;
+// PaymentFormValues is imported from schemas
 
 interface Payment {
   id: string;
